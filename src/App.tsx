@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
-import * as api from "./api";
-import { ProfileForm } from "./screens/ProfileForm";
+import * as api from "@/api";
+import { Button } from "@/components/ui/button";
+import { AlertIcon, CheckIcon, ExportIcon, Spinner } from "@/components/Icons";
+import { Wordmark } from "@/components/Wordmark";
+import { ProfileList } from "@/screens/ProfileList";
+import { StartScreen } from "@/screens/StartScreen";
+import { Summary } from "@/screens/Summary";
 import {
   BUNDLE_EXT,
   type Bundle,
@@ -8,31 +13,57 @@ import {
   type InstallReport,
   type ProbeReport,
   type Profile,
-} from "./types";
-import "./App.css";
+} from "@/types";
+import "@/index.css";
 
-type Screen = "start" | "list" | "form" | "summary";
+type Screen = "start" | "list" | "summary";
+
+/** Three tones, three meanings. A successful import printed in the error colour
+ *  teaches people to distrust red, so success never borrows it. */
+type Notice = { tone: "good" | "warn" | "bad"; text: string } | null;
+
+const TITLES: Record<Screen, { title: string; sub?: string }> = {
+  start: { title: "Start" },
+  list: { title: "Profiles" },
+  summary: { title: "Installed" },
+};
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("start");
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [editing, setEditing] = useState<Profile | undefined>();
   const [installed, setInstalled] = useState<Record<CliKind, boolean>>({
     claude: false,
     codex: false,
   });
+  const [scanned, setScanned] = useState<Profile[]>([]);
+  const [scanning, setScanning] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [probes, setProbes] = useState<Record<string, ProbeReport>>({});
+  const [testing, setTesting] = useState<Set<string>>(new Set());
   const [report, setReport] = useState<InstallReport | null>(null);
-  const [probes, setProbes] = useState<ProbeReport[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
 
-  // CLI presence is recomputed on every mount, never stored. A stored flag
-  // would leave a profile greyed out forever after the CLI is installed.
+  // Detect and scan on launch. The app has the answer before the first screen
+  // renders, so it can point at the right choice instead of asking a question it
+  // could answer itself.
   useEffect(() => {
-    void refreshCliState();
+    void (async () => {
+      await refreshCliState();
+      try {
+        setScanned(await api.scanMachine());
+      } catch {
+        setScanned([]);
+      } finally {
+        setScanning(false);
+      }
+    })();
   }, []);
 
   async function refreshCliState() {
+    // Recomputed every time, never stored — a stored flag would leave a profile
+    // greyed out forever after the CLI is installed.
     const [claude, codex] = await Promise.all([
       api.cliState("claude"),
       api.cliState("codex"),
@@ -43,34 +74,25 @@ export default function App() {
     });
   }
 
-  async function doScan() {
-    setBusy("Scanning this machine…");
-    setError(null);
-    try {
-      const found = await api.scanMachine();
-      if (found.length === 0) {
-        setError("No existing profiles found. Create one instead.");
-      } else {
-        setProfiles(found);
-        setScreen("list");
-      }
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(null);
-    }
+  function adoptScanned() {
+    setProfiles(scanned);
+    setScreen("list");
+    setNotice({
+      tone: "good",
+      text: `Adopted ${scanned.length} profile${scanned.length === 1 ? "" : "s"} from this machine. Nothing has been written yet.`,
+    });
   }
 
   async function doImport(file: File) {
     setBusy("Reading bundle…");
-    setError(null);
+    setNotice(null);
     try {
       const bundle: Bundle = JSON.parse(await file.text());
       if (!Array.isArray(bundle.profiles)) {
         throw new Error("that file is not an agentport bundle");
       }
-      // Compare identity, not name: identical entries are skipped silently so
-      // re-importing the same bundle cannot pile up copies.
+      // Compares identity, not name: identical entries are skipped so importing
+      // the same bundle twice cannot pile up copies.
       const plans = await api.planImport(bundle, profiles);
       const added: Profile[] = [];
       bundle.profiles.forEach((p, i) => {
@@ -82,19 +104,18 @@ export default function App() {
           origin: "imported",
         });
       });
+
       setProfiles((prev) => [...prev, ...added]);
       setScreen("list");
+
       const skipped = plans.filter((p) => p.kind === "skip").length;
       const renamed = plans.filter((p) => p.kind === "rename").length;
-      if (skipped || renamed) {
-        setError(
-          `${added.length} imported` +
-            (skipped ? `, ${skipped} already present` : "") +
-            (renamed ? `, ${renamed} renamed to avoid a clash` : ""),
-        );
-      }
+      const parts = [`${added.length} imported`];
+      if (skipped) parts.push(`${skipped} already present`);
+      if (renamed) parts.push(`${renamed} renamed to avoid a clash`);
+      setNotice({ tone: "good", text: parts.join(" · ") });
     } catch (e) {
-      setError(String(e));
+      setNotice({ tone: "bad", text: String(e) });
     } finally {
       setBusy(null);
     }
@@ -110,14 +131,33 @@ export default function App() {
     a.download = `profiles${BUNDLE_EXT}`;
     a.click();
     URL.revokeObjectURL(a.href);
+    setNotice({
+      tone: "warn",
+      text: "Bundle saved. It carries your API keys in plaintext — do not commit it to a repository.",
+    });
+  }
+
+  /** Probing one profile. Deliberately available before installing anything. */
+  async function testOne(p: Profile) {
+    setTesting((s) => new Set(s).add(p.alias));
+    try {
+      const r = await api.probeProfile(p);
+      setProbes((prev) => ({ ...prev, [p.alias]: r }));
+    } finally {
+      setTesting((s) => {
+        const n = new Set(s);
+        n.delete(p.alias);
+        return n;
+      });
+    }
   }
 
   async function doInstall() {
     setBusy("Writing configuration…");
-    setError(null);
+    setNotice(null);
     try {
       // Only profiles whose CLI is present get installed; the rest stay in the
-      // list, not ready, so they are not lost.
+      // list, not ready, so they are never lost.
       const ready = profiles.filter((p) => installed[p.cli]);
       const rep = await api.installProfiles(ready);
       setReport(rep);
@@ -125,9 +165,12 @@ export default function App() {
 
       setBusy("Testing each profile…");
       const results = await Promise.all(ready.map(api.probeProfile));
-      setProbes(results);
+      setProbes((prev) => ({
+        ...prev,
+        ...Object.fromEntries(results.map((r) => [r.alias, r])),
+      }));
     } catch (e) {
-      setError(String(e));
+      setNotice({ tone: "bad", text: String(e) });
     } finally {
       setBusy(null);
     }
@@ -135,7 +178,7 @@ export default function App() {
 
   function saveProfile(p: Profile) {
     setProfiles((prev) => {
-      const i = prev.findIndex((x) => x.alias === editing?.alias);
+      const i = prev.findIndex((x) => x.alias === editing);
       if (i >= 0) {
         const next = [...prev];
         next[i] = p;
@@ -143,246 +186,176 @@ export default function App() {
       }
       return [...prev, p];
     });
-    setEditing(undefined);
-    setScreen("list");
+    setEditing(null);
+    setAdding(false);
+    if (screen === "start") setScreen("list");
   }
 
-  // ---- screens ----------------------------------------------------------
-
-  if (screen === "form") {
-    return (
-      <div className="app">
-        <Header />
-        <ProfileForm
-          initial={editing}
-          onSave={saveProfile}
-          onCancel={() => {
-            setEditing(undefined);
-            setScreen(profiles.length ? "list" : "start");
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (screen === "summary" && report) {
-    return (
-      <div className="app">
-        <Header />
-        <h2>Done</h2>
-
-        {busy && <p className="hint">{busy}</p>}
-
-        {probes.map((r) => (
-          <ProbeRow key={r.alias} report={r} />
-        ))}
-
-        {profiles
-          .filter((p) => !installed[p.cli])
-          .map((p) => (
-            <div className="result warn" key={p.alias}>
-              <div className="head">
-                <code>{p.alias}</code>
-                <span className="state missing">
-                  {p.cli === "claude" ? "Claude Code" : "Codex"} is not
-                  installed
-                </span>
-              </div>
-              <div className="advice">
-                Kept, not activated. Install the CLI and run agentport again.
-              </div>
-            </div>
-          ))}
-
-        <div className="note">
-          {report.rc_line_added ? (
-            <>
-              Added one line to <code>{report.rc_file}</code>.{" "}
-              <strong>Open a new terminal</strong> — or run{" "}
-              <code>source {report.rc_file}</code> in the one you have.
-            </>
-          ) : (
-            <>
-              <code>{report.rc_file}</code> already sourced agentport, so it was
-              left untouched. Your aliases are live in any new terminal.
-            </>
-          )}
-          <br />
-          <br />
-          Default <code>claude</code> and <code>codex</code> configuration is
-          not carried by a bundle — set that up separately if you need it.
-        </div>
-
-        <div className="actions">
-          <button onClick={() => setScreen("list")}>Back to profiles</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (screen === "list") {
-    return (
-      <div className="app">
-        <Header />
-        <h2>Profiles</h2>
-
-        <div className="rows">
-          {profiles.map((p) => {
-            const ready = installed[p.cli];
-            return (
-              <div className={`row ${ready ? "" : "not-ready"}`} key={p.alias}>
-                <code className="alias">{p.alias}</code>
-                <span className="meta">
-                  {p.cli === "claude" ? "Claude" : "Codex"} · {p.provider}
-                </span>
-                <span className="row-actions">
-                  <span className={`state ${ready ? "ready" : "missing"}`}>
-                    {ready
-                      ? "ready"
-                      : `${p.cli === "claude" ? "Claude Code" : "Codex"} not installed`}
-                  </span>
-                  <button
-                    className="small"
-                    onClick={() => {
-                      setEditing(p);
-                      setScreen("form");
-                    }}
-                  >
-                    edit
-                  </button>
-                  <button
-                    className="small"
-                    onClick={() =>
-                      setProfiles((prev) =>
-                        prev.filter((x) => x.alias !== p.alias),
-                      )
-                    }
-                  >
-                    remove
-                  </button>
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {profiles.some((p) => !installed[p.cli]) && (
-          <div className="note">
-            Profiles whose CLI is missing are kept but not activated — install
-            the CLI, then{" "}
-            <button className="small" onClick={refreshCliState}>
-              check again
-            </button>
-            .
-          </div>
-        )}
-
-        {error && <p className="error">{error}</p>}
-        {busy && <p className="hint">{busy}</p>}
-
-        <div className="actions">
-          <button onClick={() => setScreen("form")}>Add profile</button>
-          <button onClick={doExport} disabled={!profiles.length}>
-            Export bundle
-          </button>
-          <div className="spacer" />
-          <button
-            className="primary"
-            onClick={doInstall}
-            disabled={!profiles.some((p) => installed[p.cli]) || !!busy}
-          >
-            Install and test
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const installable = profiles.filter((p) => installed[p.cli]).length;
+  const showList = screen === "list" || (screen === "start" && adding);
 
   return (
-    <div className="app">
-      <Header />
-      <h2>Start</h2>
-      <div className="choices">
-        <button className="choice" onClick={doScan}>
-          <strong>Scan this machine</strong>
-          <span>
-            Find profiles you already set up by hand and adopt them. Nothing is
-            written until you say so.
+    <div className="flex min-h-full flex-col">
+      {/* Sticky so the identity stays put however far the list grows. */}
+      <header className="bg-background/85 supports-backdrop-filter:bg-background/65 sticky top-0 z-20 border-b backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-3xl items-center gap-4 px-4 py-3 sm:px-6">
+          <Wordmark compact />
+          <div className="flex-1" />
+          {screen !== "start" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => {
+                setScreen("start");
+                setAdding(false);
+                setEditing(null);
+              }}
+            >
+              Start over
+            </Button>
+          )}
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mb-5 flex items-baseline gap-3">
+          <h1 className="text-muted-foreground text-xs font-semibold tracking-[0.1em] uppercase">
+            {TITLES[screen].title}
+          </h1>
+          <span className="text-muted-foreground/70 ml-auto text-xs">
+            {screen === "list" &&
+              `${profiles.length} total${
+                profiles.length - installable > 0
+                  ? ` · ${profiles.length - installable} waiting on a CLI`
+                  : ""
+              }`}
+            {screen === "summary" && report && `${report.configs.length} written`}
           </span>
-        </button>
+        </div>
 
-        <label className="choice" style={{ display: "block" }}>
-          <strong>Import a bundle</strong>
-          <span>Carry a set of profiles over from another machine.</span>
-          <input
-            type="file"
-            accept={`${BUNDLE_EXT},application/json`}
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void doImport(f);
-            }}
+        {screen === "start" && !adding && (
+          <StartScreen
+            installed={installed}
+            found={scanned.length}
+            scanning={scanning}
+            onScan={adoptScanned}
+            onImport={doImport}
+            onCreate={() => setAdding(true)}
           />
-        </label>
+        )}
 
-        <button className="choice" onClick={() => setScreen("form")}>
-          <strong>Create a profile</strong>
-          <span>Start from a Claude Code or Codex preset.</span>
-        </button>
-      </div>
+        {showList && (
+          <ProfileList
+            profiles={profiles}
+            installed={installed}
+            probes={probes}
+            testing={testing}
+            editing={editing}
+            adding={adding}
+            onEdit={(a) => {
+              setEditing(a);
+              setAdding(false);
+            }}
+            onAdd={() => {
+              setAdding(true);
+              setEditing(null);
+            }}
+            onCancelForm={() => {
+              setAdding(false);
+              setEditing(null);
+            }}
+            onSave={saveProfile}
+            onRemove={(alias) =>
+              setProfiles((prev) => prev.filter((x) => x.alias !== alias))
+            }
+            onTest={testOne}
+            onRecheck={refreshCliState}
+          />
+        )}
 
-      {error && <p className="error">{error}</p>}
-      {busy && <p className="hint">{busy}</p>}
+        {screen === "summary" && report && (
+          <Summary
+            report={report}
+            profiles={profiles}
+            installed={installed}
+            probes={probes}
+            busy={busy}
+            onBack={() => setScreen("list")}
+          />
+        )}
 
-      <div className="note">
-        Detected on this machine:{" "}
-        {installed.claude ? "Claude Code ✓" : "Claude Code ✗"} ·{" "}
-        {installed.codex ? "Codex ✓" : "Codex ✗"}
-      </div>
+        {notice && <NoticeBar notice={notice} onClose={() => setNotice(null)} />}
+
+        {busy && screen !== "summary" && (
+          <div className="text-muted-foreground mt-4 flex items-center gap-2 text-xs">
+            <Spinner className="size-3.5" />
+            {busy}
+          </div>
+        )}
+      </main>
+
+      {/* A sticky action bar keeps the primary action reachable no matter how
+          long the list gets or how short the window is. */}
+      {screen === "list" && !adding && !editing && (
+        <footer className="bg-background/85 supports-backdrop-filter:bg-background/65 sticky bottom-0 border-t backdrop-blur-md">
+          <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={doExport}
+              disabled={!profiles.length}
+            >
+              <ExportIcon className="size-4" />
+              Export bundle
+            </Button>
+            <div className="flex-1" />
+            <Button onClick={doInstall} disabled={!installable || !!busy}>
+              {busy && <Spinner className="size-4" />}
+              {installable
+                ? `Install ${installable} profile${installable === 1 ? "" : "s"}`
+                : "Nothing to install"}
+            </Button>
+          </div>
+        </footer>
+      )}
     </div>
   );
 }
 
-function Header() {
-  return (
-    <>
-      <h1>agentport</h1>
-      <p className="tagline">
-        Carry your Claude Code and Codex CLI setup to another machine.
-      </p>
-    </>
-  );
-}
-
-/** One probe outcome. The classification is the point: three failures look
- *  identical to a user but need completely different fixes. */
-function ProbeRow({ report }: { report: ProbeReport }) {
-  const r = report.result;
-  const tone =
-    r.outcome === "ok" ? "ok" : r.outcome === "no_credit" ? "warn" : "bad";
-  const label =
-    r.outcome === "ok"
-      ? `replied in ${(r.millis / 1000).toFixed(1)}s`
-      : r.outcome === "bad_key"
-        ? "key rejected"
-        : r.outcome === "no_credit"
-          ? "out of credit"
-          : r.outcome === "model_unavailable"
-            ? "no model answered"
-            : r.outcome === "unreachable"
-              ? "unreachable"
-              : `HTTP ${r.status}`;
+function NoticeBar({
+  notice,
+  onClose,
+}: {
+  notice: NonNullable<Notice>;
+  onClose: () => void;
+}) {
+  const style =
+    notice.tone === "good"
+      ? "border-(--color-ok)/25 bg-(--color-ok)/6"
+      : notice.tone === "warn"
+        ? "border-(--color-warn)/25 bg-(--color-warn)/6"
+        : "border-destructive/30 bg-destructive/6";
 
   return (
-    <div className={`result ${tone}`}>
-      <div className="head">
-        <code>{report.alias}</code>
-        <span className={`state ${tone === "ok" ? "ready" : tone === "warn" ? "missing" : "bad"}`}>
-          {label}
-        </span>
-      </div>
-      <div className="advice">{report.advice}</div>
-      {"detail" in r && r.detail && <div className="detail">{r.detail}</div>}
+    <div
+      className={`text-muted-foreground animate-in fade-in mt-5 flex items-start gap-2.5 rounded-lg border p-3 text-xs leading-relaxed ${style}`}
+    >
+      <span className="mt-px shrink-0">
+        {notice.tone === "good" ? (
+          <CheckIcon className="size-3.5" />
+        ) : (
+          <AlertIcon className="size-3.5" />
+        )}
+      </span>
+      <span className="flex-1">{notice.text}</span>
+      <button
+        onClick={onClose}
+        className="hover:text-foreground shrink-0 leading-none"
+        aria-label="Dismiss"
+      >
+        ×
+      </button>
     </div>
   );
 }

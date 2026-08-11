@@ -114,6 +114,7 @@ fn install_profiles(profiles: Vec<Profile>) -> Result<InstallReport, String> {
     for p in &profiles {
         shell::validate_alias(&p.alias)?;
     }
+    shell::check_unique_aliases(&profiles)?;
 
     let home = home_dir()?;
     let sh = host_shell();

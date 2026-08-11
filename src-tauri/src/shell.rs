@@ -221,6 +221,26 @@ pub fn validate_alias(alias: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Rejects a profile set that would generate two functions of the same name.
+///
+/// The shell keeps only the last definition, so a duplicate alias means one
+/// profile silently never runs — with the user's key sitting in a config file
+/// that looks installed. Exactly the silent-success shape this tool exists to
+/// eliminate, so it is refused rather than resolved.
+pub fn check_unique_aliases(profiles: &[Profile]) -> Result<(), String> {
+    let mut seen: Vec<&str> = Vec::new();
+    for p in profiles {
+        if seen.contains(&p.alias.as_str()) {
+            return Err(format!(
+                "two profiles both use the alias '{}' — the shell would keep only one",
+                p.alias
+            ));
+        }
+        seen.push(&p.alias);
+    }
+    Ok(())
+}
+
 /// Commands worth warning about before an alias shadows them.
 const COMMON_COMMANDS: &[&str] = &[
     "cd", "ls", "rm", "cp", "mv", "git", "sh", "bash", "zsh", "cat", "echo", "kill", "test",
@@ -460,6 +480,22 @@ mod tests {
         for a in ["c", "cht", "cht-cse", "co-ht", "co_ht"] {
             assert!(validate_alias(a).is_ok(), "{a} should be valid");
         }
+    }
+
+    /// A duplicate alias means one profile silently never runs.
+    #[test]
+    fn refuses_two_profiles_sharing_an_alias() {
+        let a = profile("cht", CliKind::Claude);
+        let b = profile("cht", CliKind::Codex);
+        let err = check_unique_aliases(&[a, b]).unwrap_err();
+        assert!(err.contains("cht"));
+    }
+
+    #[test]
+    fn accepts_distinct_aliases() {
+        let a = profile("cht", CliKind::Claude);
+        let b = profile("co-ht", CliKind::Codex);
+        assert!(check_unique_aliases(&[a, b]).is_ok());
     }
 
     #[test]

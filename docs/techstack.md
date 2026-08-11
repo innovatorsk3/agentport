@@ -54,9 +54,10 @@ agentport/
 │   │   ├── scan.rs           # §14 discover existing profiles
 │   │   ├── models.rs         # §15 fetch + validate provider model ids
 │   │   ├── bundle.rs         # §9  export/import, identity comparison
-│   │   ├── writer/           # §7  intent → each CLI's config schema   [todo]
-│   │   ├── shell.rs          # §5  script + ONE rc line                [todo]
-│   │   └── probe.rs          # §10 real call, classify failures        [todo]
+│   │   ├── writer/           # §7,§8 intent → each CLI's config schema
+│   │   ├── shell.rs          # §5,§6 script + ONE rc line
+│   │   └── probe.rs          # §10 real call, classify failures
+│   └── tests/round_trip.rs   # scan → export → import → install
 │   ├── icons/
 │   ├── tauri.conf.json
 │   └── Cargo.toml
@@ -99,7 +100,7 @@ pnpm tauri build        # release bundle for the host OS
 cd src-tauri && cargo test    # Rust unit tests
 ```
 
-**Verified on 2026-08-11:** Node 22.22.0 · pnpm 10.15.1 · Rust 1.97.1 · 28 Rust tests passing · release build produced `agentport.app` (9.7 MB) and `agentport_0.1.0_aarch64.dmg` (2.8 MB).
+**Verified on 2026-08-11:** Node 22.22.0 · pnpm 10.15.1 · Rust 1.97.1 · 94 Rust tests passing (91 unit + 3 integration) · release build produced `agentport.app` (9.7 MB) and `agentport_0.1.0_aarch64.dmg` (2.8 MB).
 
 ---
 

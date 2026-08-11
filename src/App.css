@@ -1,116 +1,208 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
-}
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
+  --bg: #14161a;
+  --panel: #1b1e24;
+  --panel-2: #22262e;
+  --line: #2e333d;
+  --text: #e6e8ec;
+  --muted: #8b93a1;
+  --accent: #6ea8fe;
+  --ok: #4ec9a0;
+  --warn: #e0b054;
+  --bad: #e0736d;
 
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
+  font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
 }
 
-.container {
+* { box-sizing: border-box; }
+
+body {
   margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
+  background: var(--bg);
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
+.app {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
 }
 
 h1 {
-  text-align: center;
+  font-size: 20px;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
 }
 
-input,
-button {
+.tagline {
+  color: var(--muted);
+  margin: 0 0 28px;
+  font-size: 13px;
+}
+
+h2 {
+  font-size: 15px;
+  margin: 0 0 12px;
+}
+
+/* --- choice cards (first screen) --- */
+
+.choices { display: grid; gap: 10px; }
+
+.choice {
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.choice:hover { border-color: var(--accent); background: var(--panel-2); }
+.choice strong { display: block; margin-bottom: 3px; font-size: 14px; }
+.choice span { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+
+/* --- profile rows --- */
+
+.rows { display: grid; gap: 8px; margin-bottom: 20px; }
+
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+  padding: 11px 14px;
 }
 
+/* "Not ready" is a computed state, not a user choice — greyed, with the
+   reason spelled out rather than a bare icon. */
+.row.not-ready { opacity: 0.62; }
+
+.row .alias {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13.5px;
+  min-width: 92px;
+}
+.row .meta { color: var(--muted); font-size: 12.5px; }
+.row .state { font-size: 12.5px; white-space: nowrap; }
+
+.state.ready { color: var(--ok); }
+.state.missing { color: var(--warn); }
+.state.bad { color: var(--bad); }
+
+.row-actions { display: flex; gap: 6px; }
+
+/* --- forms --- */
+
+.field { margin-bottom: 14px; }
+.field label {
+  display: block;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+
+input, select {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 9px 11px;
+  font: inherit;
+  font-size: 13px;
+}
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.hint { font-size: 11.5px; color: var(--muted); margin-top: 5px; line-height: 1.5; }
+.hint.warn { color: var(--warn); }
+.hint.bad { color: var(--bad); }
+
+/* --- buttons --- */
+
 button {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 13px;
   cursor: pointer;
 }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
 
-button:hover {
-  border-color: #396cd8;
+button.primary { background: var(--accent); border-color: var(--accent); color: #10131a; font-weight: 600; }
+button.small { padding: 5px 10px; font-size: 12px; }
+
+.actions { display: flex; gap: 8px; margin-top: 20px; }
+.spacer { flex: 1; }
+
+/* --- results --- */
+
+.result {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
 }
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
+.result.ok { border-left-color: var(--ok); }
+.result.warn { border-left-color: var(--warn); }
+.result.bad { border-left-color: var(--bad); }
+
+.result .head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; }
+.result .head code { font-size: 13px; }
+.result .advice { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+
+.detail {
+  margin-top: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg);
+  border-radius: 5px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-input,
-button {
-  outline: none;
+.note {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-top: 16px;
+}
+.note code { color: var(--text); }
+
+.error {
+  color: var(--bad);
+  font-size: 12.5px;
+  margin-top: 12px;
 }
 
-#greet-input {
-  margin-right: 5px;
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
 }
+.checkbox input { width: auto; }

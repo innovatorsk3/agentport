@@ -1,0 +1,54 @@
+<svg width="880" height="180" viewBox="0 0 880 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="agentport">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="880" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#151A24"/>
+      <stop offset="1" stop-color="#0F1115"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1"
+      gradientTransform="translate(150 10) rotate(35) scale(520 300)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7AA2FF" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#7AA2FF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#242C3A"/>
+      <stop offset="1" stop-color="#1A1F29"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="880" height="180" rx="14" fill="url(#bg)"/>
+  <rect width="880" height="180" rx="14" fill="url(#glow)"/>
+  <rect x="0.5" y="0.5" width="879" height="179" rx="13.5" stroke="#2A3242"/>
+
+  <!-- mark: two brackets, something crossing the gap -->
+  <g transform="translate(64 62)">
+    <rect width="56" height="56" rx="15" fill="url(#tile)" stroke="#33405A"/>
+    <g transform="translate(28 28) scale(1.75) translate(-16 -16)">
+      <path d="M11.5 9.5 L8 12.2 v7.6 l3.5 2.7" stroke="#7AA2FF" stroke-opacity="0.75"
+        stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <path d="M20.5 9.5 L24 12.2 v7.6 l-3.5 2.7" stroke="#7AA2FF" stroke-opacity="0.75"
+        stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <path d="M13.6 16 h5.2 m-2 -2.1 l2 2.1 l-2 2.1" stroke="#EEF1F6"
+        stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </g>
+  </g>
+
+  <text x="146" y="84" font-family="ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,system-ui,sans-serif"
+        font-size="26" font-weight="600" letter-spacing="4.2">
+    <tspan fill="#EEF1F6">AGENT</tspan><tspan fill="#7AA2FF">PORT</tspan>
+  </text>
+
+  <text x="147" y="112" font-family="ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,system-ui,sans-serif"
+        font-size="14" fill="#A4ADBD">Carry your Claude Code and Codex CLI setup to another machine.</text>
+
+  <!-- the journey the tool automates -->
+  <g transform="translate(147 132)" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11.5">
+    <text fill="#6F7889">macOS</text>
+    <path d="M52 -4 h34 m-7 -4 l7 4 l-7 4" stroke="#7AA2FF" stroke-opacity="0.6"
+      stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <text x="94" fill="#6F7889">.agentport</text>
+    <path d="M172 -4 h34 m-7 -4 l7 4 l-7 4" stroke="#7AA2FF" stroke-opacity="0.6"
+      stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <text x="214" fill="#6F7889">Windows</text>
+    <text x="290" fill="#55D6A5">✓ tested</text>
+  </g>
+</svg>

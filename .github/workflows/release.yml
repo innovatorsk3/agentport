@@ -93,7 +93,7 @@ jobs:
 
             **Windows**
             ```powershell
-            curl.exe -L -o agentport-setup.exe https://github.com/${{ github.repository }}/releases/latest/download/agentport-windows-x64-setup.exe
+            curl.exe -L -o agentport-setup.exe https://github.com/${{ github.repository }}/releases/latest/download/agentport-windows-x64.exe
             ```
 
             **macOS (Apple Silicon)**
@@ -104,6 +104,12 @@ jobs:
             **macOS (Intel)**
             ```bash
             curl -L -o agentport.dmg https://github.com/${{ github.repository }}/releases/latest/download/agentport-macos-intel.dmg
+            ```
+
+            **Linux**
+            ```bash
+            curl -L -o agentport.AppImage https://github.com/${{ github.repository }}/releases/latest/download/agentport-linux-x64.AppImage
+            chmod +x agentport.AppImage && ./agentport.AppImage
             ```
 
             ---

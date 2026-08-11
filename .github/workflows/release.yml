@@ -115,43 +115,8 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
+          # Stable, platform-labelled filenames are what make
+          # `releases/latest/download/<name>` resolvable. The action's own
+          # default embeds the version, which moves every release.
+          releaseAssetNamePattern: "agentport-${{ matrix.label }}[ext]"
 
-      # tauri-action names its artifacts after the app version, e.g.
-      # `agentport_0.1.0_x64-setup.exe`. A stable name is what makes
-      # `releases/latest/download/<name>` work, so each artifact is uploaded a
-      # second time under a fixed, platform-labelled filename.
-      - name: Upload stable-named assets
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-          LABEL: ${{ matrix.label }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          root="src-tauri/target/${{ matrix.target }}/release/bundle"
-
-          upload() {
-            local src="$1" name="$2"
-            [ -f "$src" ] || return 0
-            cp "$src" "/tmp/$name"
-            echo "uploading $name"
-            gh release upload "$TAG" "/tmp/$name" --repo "$REPO" --clobber
-          }
-
-          case "$LABEL" in
-            windows-x64)
-              upload "$(find "$root/nsis" -name '*-setup.exe' | head -1)" \
-                     "agentport-windows-x64-setup.exe"
-              ;;
-            macos-*)
-              upload "$(find "$root/dmg" -name '*.dmg' | head -1)" \
-                     "agentport-$LABEL.dmg"
-              ;;
-            linux-x64)
-              upload "$(find "$root/appimage" -name '*.AppImage' | head -1)" \
-                     "agentport-linux-x64.AppImage"
-              upload "$(find "$root/deb" -name '*.deb' | head -1)" \
-                     "agentport-linux-x64.deb"
-              ;;
-          esac

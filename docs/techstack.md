@@ -1,144 +1,158 @@
 # Tech Stack & Build
 
-**Ngày:** 2026-08-11
-**Trạng thái:** Chốt cho v1
+**Date:** 2026-08-11
+**Status:** Agreed for v1 · scaffold verified end to end
 
 ---
 
-## 1. Quyết định
+## 1. Decisions
 
-| Lớp | Chọn | Vì sao |
+| Layer | Choice | Why |
 |---|---|---|
-| Khung desktop | **Tauri v2** | ~5–10 MB vs ~80–150 MB của Electron. App này chỉ ghi vài file + gọi vài HTTP → không cần bundle cả Chromium. |
-| UI | **React + TypeScript + Vite** | Máy đã có Node 22 + pnpm 10. UI là 3 màn hình form, không cần gì kỳ lạ. |
-| Lõi | **Rust** (Tauri backend) | Chỉ dùng cho fs + HTTP + dò CLI. Bề mặt Rust rất nhỏ. |
-| Đóng gói | **Portable, không installer** | App chạy 2 lần trong đời (§1 requirements) — bắt cài rồi gỡ là mâu thuẫn. |
-| CI | **GitHub Actions** → Releases | Runner macOS giải bài "không build Mac trên Windows được". |
+| Desktop shell | **Tauri v2** | ~10 MB app / ~3 MB DMG vs ~80–150 MB for Electron. This app writes a few files and makes a few HTTP calls — it does not need a bundled Chromium. |
+| UI | **React + TypeScript + Vite** | Node 22 and pnpm 10 already on the machine. Three form screens; nothing exotic required. |
+| Core | **Rust** (Tauri backend) | Filesystem, HTTP, CLI detection. Small surface. |
+| Packaging | **Portable, no installer** | The app runs twice in its lifetime (requirements §1) — demanding an install and an uninstall contradicts that. |
+| CI | **GitHub Actions** → Releases | macOS runners solve "you cannot build a Mac app on Windows". |
 
-### Vì sao Tauri chứ không Electron
+### Why Tauri over Electron
 
-App làm gì: ghi file config, gọi HTTP test, dò xem CLI có trên máy không. Không nặng tính toán, không UI phức tạp.
+What the app does: write config files, make HTTP test calls, check whether a CLI is on PATH. No heavy computation, no complex UI.
 
-150 MB để ghi mấy file config là lố. Đổi lại Tauri dùng **webview hệ thống** (WebView2 trên Windows, WKWebView trên macOS) nên UI có thể lệch nhau chút ít giữa hai hệ — chấp nhận được với 3 màn hình form.
+150 MB to write a few config files is disproportionate. The trade is that Tauri uses the **system webview** (WebView2 on Windows, WKWebView on macOS), so the UI can render slightly differently across platforms — acceptable for three form screens.
 
-### Rủi ro đã biết
+### Why Rust over Go or Python
 
-**Rust ở lõi.** Máy dev hiện **chưa cài** Rust (`rustc`/`cargo` not found). Phải cài trước khi chạy `pnpm tauri dev`.
+**Python was ruled out** — not for the language but for its desktop packaging story. PyInstaller output is [routinely flagged by Windows Defender](https://github.com/pyinstaller/pyinstaller/issues/5854) because malware ships the same way. Combined with an unsigned binary, that is two layers of suspicion on a tool people are asked to download.
 
-Nếu Rust làm chậm tiến độ ở tuần thứ hai → phương án lùi là Electron, đổi 15× kích thước lấy tốc độ ship. Quyết định này **có thể đảo**, không phải một chiều.
+**Go + Wails** was the pragmatic alternative — comparable size, gentler learning curve. It was declined because the developer has not written Go either, so its main advantage disappeared.
 
-**WebView2 trên Windows cũ.** Windows 11 và Windows 10 mới có sẵn. Máy cũ có thể thiếu — Tauri có tuỳ chọn bundle kèm nếu cần.
+**Rust + Tauri** won on ecosystem maturity: a first-party `tauri-action` for CI, thorough signing documentation, and a large community. Roughly 90% of the code is TypeScript regardless; the Rust portion is filesystem and HTTP work, which is the gentlest corner of the language.
+
+### Known risks
+
+**Rust learning curve.** If it slows delivery, the fallback is Electron — trading 15× the size for shipping speed. **This decision is reversible.**
+
+**WebView2 on older Windows.** Present on Windows 11 and recent Windows 10. Tauri can bundle it if a real machine reports otherwise.
 
 ---
 
-## 2. Cấu trúc thư mục
+## 2. Layout
 
 ```
 agentport/
 ├── src/                      # React UI
-│   ├── screens/              # 3 màn: chọn nguồn · danh sách · tổng kết
+│   ├── screens/              # source · list · summary
 │   ├── components/
-│   └── types/                # kiểu bundle dùng chung với Rust
+│   └── types/                # bundle types mirroring the Rust side
 ├── src-tauri/
 │   ├── src/
 │   │   ├── main.rs
-│   │   ├── detect.rs         # dò CLI có trên máy không (§10)
-│   │   ├── writer/           # dịch ý định → file config (§7)
-│   │   │   ├── claude.rs     # permissions.defaultMode
-│   │   │   └── codex.rs      # approval_policy + sandbox_mode
-│   │   ├── shell.rs          # sinh script + đăng ký 1 dòng (§5)
-│   │   ├── bundle.rs         # export/import, so danh tính (§9)
-│   │   └── probe.rs          # test sinh chữ thật, phân loại lỗi (§10)
+│   │   ├── lib.rs            # Tauri commands
+│   │   ├── model.rs          # §7  bundle types — intent, not files
+│   │   ├── detect.rs         # §10 is the CLI installed
+│   │   ├── scan.rs           # §14 discover existing profiles
+│   │   ├── models.rs         # §15 fetch + validate provider model ids
+│   │   ├── bundle.rs         # §9  export/import, identity comparison
+│   │   ├── writer/           # §7  intent → each CLI's config schema   [todo]
+│   │   ├── shell.rs          # §5  script + ONE rc line                [todo]
+│   │   └── probe.rs          # §10 real call, classify failures        [todo]
 │   ├── icons/
 │   ├── tauri.conf.json
 │   └── Cargo.toml
 ├── .github/workflows/release.yml
 ├── docs/
-│   ├── requirements.md
-│   └── techstack.md
-├── .gitignore
-└── package.json
+└── .gitignore
 ```
 
-Cách chia này bám thẳng vào requirements — mỗi file lõi ứng với một mục.
+Each core module maps to one requirements section, so the reason it exists stays legible.
 
 ---
 
-## 3. Ranh giới Rust ↔ React
+## 3. Rust ↔ React boundary
 
-**Rust làm** (đụng hệ thống):
-- Đọc/ghi file config của CLI
-- Dò xem `claude` / `codex` có trong `PATH` không
-- Sinh script shell + đăng ký một dòng vào file khởi động
-- Gọi HTTP test tới provider
-- Đọc/ghi file bundle
+**Rust does** everything touching the system:
+- Read and write CLI config files
+- Scan for existing profiles
+- Check whether `claude` / `codex` are on PATH
+- Generate the shell script and register one rc line
+- Make HTTP test calls
+- Read and write bundle files
 
-**React làm:** hiển thị, nhập liệu, trạng thái màn hình. **Không** đụng file trực tiếp.
+**React does** rendering, input, and screen state. It **never** touches the filesystem directly.
 
-Lý do: mọi thao tác nguy hiểm nằm sau một bề mặt Rust hẹp, dễ soát — đặc biệt là phần ghi vào file khởi động shell (§5, đây là chỗ 7 dòng Antigravity trùng lặp sinh ra).
+Rationale: every dangerous operation sits behind a narrow, auditable Rust surface — especially writing to the shell rc (§5), the exact place seven duplicate Antigravity lines came from.
 
 ---
 
-## 4. Build cục bộ
+## 4. Local build
 
 ```bash
-# lần đầu — máy này CHƯA có Rust
+# once, if Rust is not installed
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 pnpm install
-pnpm tauri dev          # chạy dev
-pnpm tauri build        # build cho HĐH hiện tại
+pnpm dev                # frontend only
+pnpm tauri dev          # full app
+pnpm tauri build        # release bundle for the host OS
+
+cd src-tauri && cargo test    # Rust unit tests
 ```
 
-Node 22.22.0 ✓ · pnpm 10.15.1 ✓ · Rust ✗ (cần cài)
+**Verified on 2026-08-11:** Node 22.22.0 · pnpm 10.15.1 · Rust 1.97.1 · 28 Rust tests passing · release build produced `agentport.app` (9.7 MB) and `agentport_0.1.0_aarch64.dmg` (2.8 MB).
 
 ---
 
 ## 5. CI → GitHub Releases
 
-### Ma trận
+### Matrix
 
-| Nền tảng | Runner | Target | Ra file |
+| Platform | Runner | Target | Output |
 |---|---|---|---|
 | macOS Apple Silicon | `macos-latest` | `aarch64-apple-darwin` | `.dmg`, `.app` |
 | macOS Intel | `macos-latest` | `x86_64-apple-darwin` | `.dmg`, `.app` |
-| Windows x64 | `windows-latest` | mặc định | `.exe`, `.msi` |
+| Windows x64 | `windows-latest` | default | `.exe` (NSIS) |
 
-Dùng `tauri-apps/tauri-action@v1`. Kích hoạt bằng đẩy tag `v*`.
+Uses `tauri-apps/tauri-action@v1`, triggered by pushing a `v*` tag.
 
-`fail-fast: false` — một nền tảng hỏng không huỷ các nền tảng còn lại.
+`fail-fast: false` — one platform failing does not cancel the others.
 
-### Ký tên — v1 KHÔNG ký
+### Signing — v1 is unsigned
 
-Chưa mua chứng chỉ. Hệ quả người dùng phải biết:
+No certificate purchased. Consequences users must know:
 
-**macOS:** Gatekeeper chặn lần đầu. Mở bằng chuột phải → Open, hoặc Privacy & Security → "Open Anyway".
+**macOS:** Gatekeeper blocks the first launch. Right-click → Open, or Privacy & Security → "Open Anyway".
 
-⚠️ **Bắt buộc dù không ký:** đặt `"signingIdentity": "-"` trong `tauri.conf.json` (ad-hoc signing). Không có nó thì bản Apple Silicon tải từ GitHub Releases bị macOS báo **"damaged"** — người dùng tưởng file hỏng, không phải cảnh báo bảo mật thường. Ad-hoc không bỏ được cảnh báo Gatekeeper, nhưng bỏ được cái "damaged" gây hiểu nhầm.
+⚠️ **Required even when unsigned:** `"signingIdentity": "-"` in `tauri.conf.json` (ad-hoc signing). Without it, Apple Silicon builds downloaded from GitHub Releases are reported as **"damaged"** — users read that as a corrupt download rather than a security prompt. Ad-hoc signing does not remove the Gatekeeper warning, but it does remove that misleading one.
 
-**Windows:** SmartScreen hiện "Windows protected your PC" → More info → Run anyway.
+Verified present in the local build: `codesign -dv` reports `Signature=adhoc`.
 
-Nội bộ thì chấp nhận được. Nếu sau này phát rộng: Apple Developer Program ~$99/năm, chứng chỉ ký code Windows vài trăm đô/năm *(giá cần kiểm lại)*.
+**Windows:** SmartScreen shows "Windows protected your PC" → More info → Run anyway.
 
----
-
-## 6. Bảo mật: bundle chứa key
-
-Theo §7 requirements, bundle mang key **plaintext** — dùng nội bộ, cố ý không mã hoá.
-
-Hệ quả với repo công khai:
-
-- `.gitignore` chặn `*.agentport`, `*.agentport.json`, `**/agentport-bundle*`
-- Đuôi file cố tình **lạ mắt**, không phải `config.json` — `git add .` không tha ai
-- README phải nói thẳng: **đừng commit file bundle**
-- Kho mẫu chỉ có `.example` với key giả
-
-Người dùng đã từng để `MUST1C_API_KEY` trần trong `.zshrc` — đây không phải rủi ro lý thuyết.
+Acceptable for internal use. For wider distribution: Apple Developer Program (~$99/year) and a Windows code-signing certificate (a few hundred dollars/year) — *figures worth re-checking.*
 
 ---
 
-## 7. Còn để ngỏ
+## 6. Security: bundles carry keys
 
-- **Linux** — Tauri build được AppImage/deb, nhưng chưa có yêu cầu. Thêm sau nếu cần.
-- **Bundle WebView2** cho Windows cũ — chờ có máy thật báo lỗi.
-- **Tự cập nhật** — Tauri có updater. App chạy 2 lần/đời thì gần như vô nghĩa; nhiều khả năng bỏ.
+Per requirements §7, bundles carry keys in **plaintext** — deliberate, for internal use.
+
+Consequences for a public repository:
+
+- `.gitignore` blocks `*.agentport`, `*.agentport.json`, `**/agentport-bundle*`
+- The extension is deliberately **distinctive**, not `config.json` — `git add .` forgives nobody
+- The README states plainly: **do not commit bundle files**
+- Any sample files use fake keys and an `.example` suffix
+
+This is not a theoretical risk: a live API key was found sitting in plaintext in the developer's `.zshrc`.
+
+**Verified:** `git check-ignore` confirms `test.agentport`, `sub/agentport-bundle-2026.json`, and `.env` are all blocked, and `git add -A` does not pick them up.
+
+---
+
+## 7. Still open
+
+- **Linux** — Tauri can produce AppImage/deb, but there is no requirement yet
+- **Bundling WebView2** for older Windows — wait for a real machine to report a failure
+- **Auto-update** — Tauri offers an updater. For an app that runs twice in its lifetime this is close to pointless; likely dropped
+- **Licence** — undecided

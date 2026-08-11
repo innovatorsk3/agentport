@@ -1,6 +1,6 @@
 name: release
 
-# Đẩy tag v* -> build cả 3 nền tảng -> tạo GitHub Release (draft)
+# Push a v* tag -> build all three platforms -> create a draft GitHub Release
 #   git tag v0.1.0 && git push origin v0.1.0
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 jobs:
   build:
     strategy:
-      fail-fast: false        # 1 nền tảng hỏng không huỷ các nền tảng còn lại
+      fail-fast: false        # one platform failing must not cancel the others
       matrix:
         include:
           - platform: macos-latest
@@ -59,12 +59,13 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'agentport ${{ github.ref_name }}'
           releaseBody: |
-            Tải bản cho hệ điều hành của bạn ở phần Assets bên dưới.
+            Download the build for your operating system from Assets below.
 
-            **macOS** — chưa ký chứng chỉ Apple. Lần đầu mở: chuột phải vào app
-            → Open, hoặc System Settings → Privacy & Security → "Open Anyway".
+            **macOS** — not signed with an Apple certificate. On first launch:
+            right-click the app → Open, or System Settings → Privacy & Security
+            → "Open Anyway".
 
-            **Windows** — chưa ký chứng chỉ. SmartScreen sẽ hiện cảnh báo:
+            **Windows** — not signed. SmartScreen will warn:
             More info → Run anyway.
           releaseDraft: true
           prerelease: false

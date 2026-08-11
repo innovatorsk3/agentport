@@ -1,166 +1,168 @@
-# Agent CLI Profile Installer — Requirements
+# agentport — Requirements
 
-**Ngày:** 2026-08-11
-**Nguồn:** Party-mode requirements discovery (Mary, John, Sally, Winston, Amelia, Paige)
-**Trạng thái:** Đã chốt phạm vi — sẵn sàng dựng
-
----
-
-## 1. Nó là gì
-
-> Một **installer có giao diện** để mang cấu hình agent CLI (Claude Code, Codex) từ máy này sang máy khác — kể cả khác hệ điều hành — bao gồm cả những thứ khó chịu như bypass permission, và chứng minh nó chạy trước khi bạn rời máy.
-
-**Không phải** app quản lý alias. Alias chỉ là bề mặt; phần ruột là **tính di động** và **bằng chứng**.
-
-**Vòng đời:** Mở → nhập tay hoặc import bundle → ghi config xuống máy → test → đóng.
-Terminal chạy độc lập sau đó, **kể cả khi gỡ app**. Mở lại app chỉ khi cần đổi thứ gì đó.
-
-### Chỉ số thành công
-
-Từ lúc mở app trên máy trắng đến lúc gõ `cht` chạy được: **≤ 2 phút**.
-(Hiện tại làm tay: cả một buổi, với 4 lỗi im lặng trên đường.)
+**Date:** 2026-08-11
+**Status:** Scope agreed — ready to build
 
 ---
 
-## 2. Vì sao — bằng chứng, không phải giả định
+## 1. What it is
 
-Mọi requirement lớn dưới đây đều rút từ **lỗi thật** trong một phiên debug ngày 2026-08-11:
+> A **GUI installer** that carries agent CLI configuration (Claude Code, Codex) from one machine to another — across operating systems — including awkward settings like permission bypass, and proves it works before you walk away.
 
-| # | Lỗi thật đã xảy ra | Dẫn tới requirement |
+**Not** an alias manager. Aliases are the surface; the substance is **portability** and **proof**.
+
+**Lifecycle:** open → scan, type, or import → write config to disk → test → close.
+The terminal keeps working afterwards, **even if the app is deleted**. Reopen only to change something.
+
+### Success metric
+
+From opening the app on a blank machine to `cht` working in a terminal: **≤ 2 minutes**.
+(Doing it by hand: an afternoon, with four silent failures on the way.)
+
+---
+
+## 2. Why — evidence, not assumption
+
+Every major requirement below traces to a **real failure** observed during a debugging session on 2026-08-11:
+
+| # | What actually happened | Requirement it drives |
 |---|---|---|
-| 1 | Switch profile ghi đè `~/.claude/settings.json` → dính **toàn máy**, người dùng phát hiện chứ không phải công cụ | §5 Ranh giới sở hữu |
-| 2 | `defaultMode` đặt ở top-level thay vì trong `permissions` → **im lặng bị bỏ qua**, không một dòng lỗi | §7 Bundle lưu ý định · §8 Dangerous là thang bậc |
-| 3 | Hàm `cp_codex` hardcode `MUST1C_CSE_API_KEY` → profile thứ hai nạp key vào sai biến | §6 Mỗi profile một biến env riêng |
-| 4 | Key `cse` trả **200 OK** ở `/v1/models` nhưng **timeout** ở `/v1/responses` | §10 Test phải gọi sinh chữ thật |
-| 5 | **7 dòng** `# Added by Antigravity` trùng lặp trong `.zshrc` (+ 2 dòng `postgresql@17`, 2 khối `NVM_DIR`) | §5 Một dòng bất biến · §9 Không đẻ bản sao |
+| 1 | Switching profiles overwrote `~/.claude/settings.json` → affected **the whole machine**; the user noticed, not the tooling | §5 Ownership boundary |
+| 2 | `defaultMode` placed at the top level instead of inside `permissions` → **silently ignored**, no error anywhere | §7 Bundles store intent · §8 Danger is a scale |
+| 3 | A shell function hardcoded `MUST1C_CSE_API_KEY` → the second profile loaded its key into the wrong variable | §6 One env var per profile |
+| 4 | A key returned **200 OK** on `/v1/models` but **timed out** on `/v1/responses` | §10 Test with a real generation call |
+| 5 | **Seven** duplicate `# Added by Antigravity` lines in one `.zshrc` (plus two duplicate `postgresql@17` lines and two duplicate `NVM_DIR` blocks) | §5 One immutable line · §9 Never spawn copies |
+| 6 | Claude profiles configured for `claude-opus-5` against a provider serving **no Claude models at all** — neither CLI reports it | §15 Model setup must be verified |
 
-**Ba trên bốn lỗi đầu là lỗi im lặng** — không crash, không log. Cứ tưởng chạy.
-
----
-
-## 3. Phạm vi
-
-### Trong phạm vi
-- Nhập tay profile mới (lần đầu dùng)
-- Export bundle (chọn được cái nào đi)
-- Import bundle (cross-OS: macOS ↔ Windows ↔ Linux)
-- Sinh script shell + đăng ký một dòng vào file khởi động shell
-- Phát hiện CLI đã cài hay chưa
-- Test kết nối thật, phân loại lỗi
-
-### Ngoài phạm vi
-- **Cài CLI hộ** — chỉ phát hiện và báo. Trở thành trình quản lý gói là hố không đáy.
-- **Mã hoá / passphrase cho bundle** — dùng nội bộ, key đi theo dạng đọc được.
-- **Dashboard thường trú / poll trạng thái** — đốt credit người dùng; test theo yêu cầu thôi.
-- **Sửa cấu hình mặc định của CLI** (xem §4 tầng 1).
+**Four of these six were silent failures** (#2, #3, #4, #6) — no crash, no log. They looked like success.
 
 ---
 
-## 4. Mô hình ba tầng
+## 3. Scope
+
+### In scope
+- Type in a new profile by hand (first run)
+- **Scan this machine for profiles that already exist** and offer them for adoption
+- Export a bundle (selectable)
+- Import a bundle (cross-OS: macOS ↔ Windows ↔ Linux)
+- Generate a shell script and register one line in the shell rc
+- Detect whether each CLI is installed
+- Real connection test with failure classification
+- **Fetch the provider's actual model list** and validate the mapping against it
+
+### Out of scope
+- **Installing CLIs** — detect and report only. Becoming a package manager is a bottomless pit.
+- **Bundle encryption / passphrases** — internal use; keys travel readable.
+- **A resident dashboard that polls** — burns the user's credit; test on demand instead.
+- **Editing tier-1 CLI defaults** (see §4).
+
+---
+
+## 4. The three tiers
 
 ```
-Tầng 1 — Cấu hình mặc định của CLI     `claude` / `codex` gõ trần
-Tầng 2 — Profile có tên                 htmustc, htcse
-Tầng 3 — Alias                          cht, co-ht, c
+Tier 1 — CLI default config      bare `claude` / `codex`
+Tier 2 — named profile           htmustc, htcse
+Tier 3 — alias                   cht, co-ht, c
 ```
 
-**App chỉ chạm tầng 2 và 3.**
+**The app only touches tiers 2 and 3.**
 
-**Tầng 1** — app chỉ được **đặt tên gọi** (tạo alias `c` → `claude`), tuyệt đối không sửa nội dung. Không đi theo bundle.
+**Tier 1** may only be **given a name** (creating `c` → `claude`); its contents are never modified, and it never travels in a bundle.
 
-> `alias c='claude'` ← app tạo cái này
-> `claude` ← app không đụng
+> `alias c='claude'` ← the app creates this
+> `claude` ← the app never touches this
 
-App sở hữu **cái tên**, không sở hữu **cái được gọi**. Xoá alias thì `claude` vẫn chạy.
+The app owns **the name**, not **the thing being named**. Delete the alias and `claude` still works.
 
-**Hệ quả cần báo người dùng:** trên máy mới, `codex` gõ trần sẽ không chạy nếu nó phụ thuộc env var ngoài profile (ví dụ `MUST1C_API_KEY` đang nằm trần trong `.zshrc`). Xem §10 màn hình cuối.
+**Consequence to surface:** on a new machine, a bare `codex` will not work if it depends on an environment variable outside any profile. See §10, final screen.
 
 ---
 
-## 5. Ranh giới sở hữu (bất khả xâm phạm)
+## 5. Ownership boundary (non-negotiable)
 
-| App sở hữu | App KHÔNG ĐỤNG |
+| The app owns | The app never touches |
 |---|---|
-| Profile có tên | Auth Anthropic của người dùng |
-| Alias trỏ tới chúng | `~/.claude/settings.json` mặc định |
-| Thư mục riêng của app | `~/.codex/config.toml` gốc |
-| | Env var có sẵn trong shell rc |
+| Named profiles | The user's Anthropic auth |
+| Aliases pointing at them | Default `~/.claude/settings.json` |
+| Its own directory | Base `~/.codex/config.toml` |
+| | Environment variables already in the shell rc |
 
-### Không sở hữu file khởi động shell
+### It does not own the shell rc
 
-App ghi vào **thư mục riêng**, sinh ra **một file duy nhất**. File khởi động shell chỉ nhận **đúng một dòng, một lần, không bao giờ đổi**:
+The app writes into **its own directory** and generates **one file**. The shell rc receives exactly **one line, once, and never changes it**:
 
 ```sh
 # macOS/Linux — ~/.zshrc | ~/.bashrc | fish config
-[ -f ~/.<app>/profiles.sh ] && . ~/.<app>/profiles.sh
+[ -f ~/.agentport/profiles.sh ] && . ~/.agentport/profiles.sh
 ```
 ```powershell
 # Windows — $PROFILE
-if (Test-Path ~/.<app>/profiles.ps1) { . ~/.<app>/profiles.ps1 }
+if (Test-Path ~/.agentport/profiles.ps1) { . ~/.agentport/profiles.ps1 }
 ```
 
-**Lý do:** GUI cắm tay vào file khởi động shell bằng regex là súng chĩa vào chân — ghi hỏng một lần thì **không mở nổi terminal**, mà cần terminal để sửa. Gỡ app = xoá một dòng. Bán kính nổ bằng 0.
+**Why:** a GUI editing a shell startup file with regex is a foot-gun. Corrupt it once and **the terminal will not open** — and you need a terminal to fix it. Uninstall = delete one line. Blast radius zero.
 
-**Phải kiểm tra dòng đó đã tồn tại chưa trước khi thêm.** Đây chính là lỗi tạo ra 7 dòng Antigravity trùng lặp.
+**That line must be checked for before it is added.** Skipping that check is precisely what produced seven duplicate Antigravity lines.
 
-### File sinh ra
-- Header rõ: `# GENERATED — DO NOT EDIT`
-- **Phải chịu được việc người dùng vẫn sửa tay** (đã xảy ra: `alias c='claude'` được thêm tay vào giữa block)
-- Đọc lại trước khi ghi, không cache mù — Claude tự ghi ngược vào `settings.json` khi người dùng dùng `/config` đổi model
+### The generated file
+- Clear header: `# GENERATED — DO NOT EDIT`
+- **Must tolerate the user editing it anyway** (already observed: a hand-added `alias c='claude'` sitting inside the managed block)
+- Re-read before writing, never cache blindly — Claude Code writes back to `settings.json` when the user changes the model via `/config`
 
 ---
 
-## 6. Cơ chế: sinh script shell, KHÔNG sinh binary
+## 6. Mechanism: generate shell scripts, NOT a binary launcher
 
-**Quyết định đã đảo chiều** (Winston rút lại khuyến nghị launcher binary sau khi biết app chỉ chạy một lần/máy):
+**This decision was reversed mid-discussion**, once it became clear the app runs only once per machine:
 
-| | Sinh script shell ✅ | Launcher binary ❌ |
+| | Generated shell script ✅ | Binary launcher ❌ |
 |---|---|---|
-| Chi phí viết cho nhiều shell | Trả **một lần** (app chạy 1 lần/máy) | Không có |
-| Ký Gatekeeper / SmartScreen | Không cần | Trả **mãi mãi** |
-| Quản lý `PATH` | Không cần | Trả mãi mãi |
-| App gỡ đi rồi | Alias **vẫn chạy** | Lệnh chết |
-| Người dùng đọc/sửa/xoá được | Có | Không |
+| Cost of supporting several shells | Paid **once** | None |
+| Gatekeeper / SmartScreen signing | Not needed | Paid **forever** |
+| `PATH` management | Not needed | Paid forever |
+| After the app is deleted | Aliases **still work** | Dead commands |
+| User can read / edit / delete it | Yes | No |
 
-**Lời hứa:** app đi rồi, thứ nó làm vẫn còn.
+**The promise:** the app goes away, what it did stays.
 
-### Mỗi profile một biến env riêng
-Tên biến env cho key phải **lưu trong profile**, không hardcode. Đây là lỗi #3: `cp_codex` hardcode `MUST1C_CSE_API_KEY` khiến profile thứ hai nạp key vào sai biến.
+### One env var per profile
+The environment variable carrying the key must be **stored on the profile**, never hardcoded. That was failure #3: a hardcoded `MUST1C_CSE_API_KEY` made the second profile load its key into the wrong variable.
 
-### Ràng buộc tên alias
-- **Không dấu cách**, không ký tự cần escape — alias là thứ **gõ ở terminal**, khác tên file (chỉ để nhìn)
-- Gạch ngang OK (`cht-cse` đã chạy tốt)
-- Cảnh báo nếu trùng lệnh có sẵn trên hệ thống (`cd`, `ls`…)
-- PowerShell: alias **không nhận tham số** → phải sinh `function` rồi `Set-Alias`
-
----
-
-## 7. Bundle: lưu Ý ĐỊNH, không lưu FILE
-
-**Nguyên tắc trung tâm để cross-OS chạy được.**
-
-Bundle **không chứa**:
-- Đường dẫn tuyệt đối (`~/.claude/profiles/htcse.json` là khái niệm macOS; Windows là `C:\Users\...`)
-- JSON của Claude hay TOML của Codex nguyên si
-
-Bundle **chứa ý định**:
-> *"Profile tên `htcse`, provider htmustc, base URL này, loại CLI Claude, bypass permission bật, model mapping kia, key này."*
-
-Máy đích **tự dịch** ra file theo schema của phiên bản CLI đang cài.
-
-**Lý do:** Claude vừa đổi vị trí `defaultMode` (lỗi #2) và tốn nửa buổi debug. Nếu bundle khoá vào schema của CLI, mọi bundle cũ chết khi CLI đổi. Với lớp dịch, chỉ cần sửa lớp dịch.
-
-### Yêu cầu khác
-- **Số phiên bản bundle** — định dạng sẽ đổi, bundle cũ vẫn nằm đâu đó
-- **Key đi theo, đọc được** — dùng nội bộ, không mã hoá, không passphrase
-- **Tên file khó lọt git** — không đặt `config.json`; dùng đuôi lạ mắt (ví dụ `.agentprofiles`). `git add .` không tha ai; người dùng đã từng để key trần trong `.zshrc`
-- **Export chọn được** cái nào đi, không bắt buộc tất cả
+### Alias constraints
+- **No spaces**, no characters needing escaping — an alias is **typed at a terminal**, unlike a filename which is only ever read
+- Dashes are fine (`cht-cse` works today)
+- Warn when it shadows an existing system command (`cd`, `ls`, …)
+- PowerShell aliases **cannot take arguments** → generate a `function`, then `Set-Alias`
 
 ---
 
-## 8. Dangerous là THANG BẬC, không phải công tắc
+## 7. Bundles store INTENT, not FILES
 
-Không phải một checkbox. Phải **dịch riêng cho từng CLI**, và mỗi CLI có số nấc khác nhau.
+**The central principle that makes cross-OS work.**
+
+A bundle **excludes**:
+- Absolute paths (`~/.claude/profiles/htcse.json` is a macOS notion; Windows is `C:\Users\…`)
+- Verbatim Claude JSON or Codex TOML
+
+A bundle **contains intent**:
+> *"Profile `htcse`, provider htmustc, this base URL, CLI kind Claude, permission bypass on, this model mapping, this key."*
+
+The destination machine **translates** that into files matching whatever CLI version is installed.
+
+**Why:** Claude Code moved `defaultMode` (failure #2) and it cost half a session to diagnose. A bundle locked to a CLI's schema dies whenever that schema moves. With a translation layer, only the translation layer changes.
+
+### Other requirements
+- **Bundle version number** — the format will change and old bundles persist
+- **Keys travel readable** — internal use; no encryption, no passphrase
+- **A filename unlikely to slip into git** — not `config.json`; use a distinctive extension (`.agentport`). `git add .` forgives nobody, and this user has already had a key sitting in plaintext in `.zshrc`
+- **Selectable export** — the user picks which profiles travel
+
+---
+
+## 8. Danger is a SCALE, not a switch
+
+Not a checkbox. It must be **translated per CLI**, and each CLI has a different number of rungs.
 
 ### Claude Code — `~/.claude/settings.json`
 ```json
@@ -169,164 +171,229 @@ Không phải một checkbox. Phải **dịch riêng cho từng CLI**, và mỗi
   "skipDangerousModePermissionPrompt": true
 }
 ```
-⚠️ **`defaultMode` phải nằm TRONG `permissions`.** Đặt ở top-level → im lặng bị bỏ qua, không báo lỗi (lỗi #2).
+⚠️ **`defaultMode` must sit INSIDE `permissions`.** At the top level it is silently ignored with no error (failure #2).
 
-Các mức: `default` · `acceptEdits` · `plan` · `dontAsk` · `bypassPermissions`
+Modes: `default` · `acceptEdits` · `plan` · `dontAsk` · `bypassPermissions`
 
 ### Codex — `~/.codex/<profile>.config.toml`
-**Hai trục độc lập:**
+**Two independent axes:**
 ```toml
 approval_policy = "never"            # untrusted | on-request | never
 sandbox_mode = "danger-full-access"  # read-only | workspace-write | danger-full-access
 ```
-Codex có mức trung gian `workspace-write` (không hỏi, nhưng chặn ghi ngoài workspace) mà Claude **không có** tương đương.
+Codex has an intermediate `workspace-write` rung (never prompts, but blocks writes outside the workspace) with **no Claude equivalent**.
 
 ---
 
-## 9. Import: so DANH TÍNH, không so tên
+## 9. Import compares IDENTITY, not name
 
-### Hai trục nhận dạng
+### Two axes
 
-- **Danh tính** = provider + base URL + loại CLI
-- **Tên gọi** = alias
+- **Identity** = provider + base URL + CLI kind
+- **Name** = alias
 
-Chúng có thể lệch nhau theo cả hai chiều:
+They can diverge in both directions:
 
-| Danh tính | Tên | Xử lý |
+| Identity | Name | Action |
 |---|---|---|
-| Giống | Giống | **Giống hệt** → im lặng bỏ qua, KHÔNG đẻ bản sao |
-| Giống | Khác | Cùng provider, máy này gọi tên khác → giữ nguyên |
-| **Khác** | **Giống** | **Xung đột thật** — tên bị chiếm → tự thêm hậu tố |
-| Khác | Khác | Mới → import |
+| Same | Same | **Identical** → skip silently, spawn NO copy |
+| Same | Different | Same provider under a local name → keep as is |
+| **Different** | **Same** | **Real conflict** — the name is taken → auto-suffix |
+| Different | Different | New → import |
 
-### Quy tắc hậu tố
-Trùng tên nhưng khác ruột → tự thêm `-1`, `-2` (kiểu file tải về, nhưng **gạch ngang không ngoặc** vì alias phải gõ được):
+### Suffix rule
+A taken name gets `-1`, `-2` (like a downloaded file, but **dash, not parentheses**, because an alias must be typeable):
 
 ```
-cht        ← đã có
-cht-1      ← cái mới import vào
+cht        ← already present
+cht-1      ← the newly imported one
 ```
 
-### Không hỏi gì — chạy một mạch
-Import không popup. Xong rồi hiện tổng kết, người dùng tự dọn.
+### No prompts — run straight through
+Import shows a summary at the end; the user tidies up from there.
 
-**Nhưng bắt buộc chặn bản sao giống hệt.** Đây là bài học từ 7 dòng Antigravity: import lại cùng một bundle (hành vi bình thường — quên đã import chưa nên làm lại cho chắc) không được đẻ ra `cht-1`, `cht-2`, `cht-3` vô nghĩa.
+**But identical entries must be blocked.** The lesson from the seven Antigravity lines: re-importing the same bundle — an ordinary thing to do when you cannot remember whether you already did — must not produce `cht-1`, `cht-2`, `cht-3`.
 
 ---
 
-## 10. Trạng thái & bằng chứng
+## 10. State and proof
 
-### CLI chưa cài → GIỮ, hiện xám
+### Missing CLI → KEEP, show greyed out
 
 ```
-  c          Claude · đăng nhập máy này               [đổi tên]
-  cht        Claude · htmustc            ✓ sẵn sàng   [sửa] [xoá]
-  co-ht      Codex  · htmustc            ⃠ chưa cài Codex CLI
-                                           [ Kiểm tra lại ]
+  c          Claude · this machine's login              [rename]
+  cht        Claude · htmustc            ✓ ready        [edit] [delete]
+  co-ht      Codex  · htmustc            ⃠ Codex CLI not installed
+                                           [ Check again ]
 ```
 
-- Cấu hình **lưu**, alias **chưa tạo**
-- Khi cài CLI xong → app hỏi *"Kích hoạt `co-ht` chứ?"* — một cú bấm
-- **Từ ngữ:** *"chưa sẵn sàng"* không phải *"disabled"*. "Disabled" nghe như người dùng đã tắt nó → đi tìm nút bật. "Chưa sẵn sàng — thiếu Codex" → đi cài Codex.
-- **Trạng thái tính ra mỗi lần mở app, KHÔNG lưu thành cờ.** Lưu cờ → cài Codex rồi mà vẫn xám vì cờ mắc kẹt.
-- Dòng tầng 1 (`c`) chỉ có **một** nút `[đổi tên]` — không sửa, không xoá, không ô key/URL
+- Configuration is **stored**, the alias is **not yet created**
+- Once the CLI appears → *"Activate `co-ht`?"* — one click
+- **Wording:** *"not ready"*, not *"disabled"*. "Disabled" implies the user turned it off, sending them hunting for an on switch. "Not ready — Codex missing" sends them to install Codex.
+- **Computed on every launch, NEVER stored as a flag.** A stored flag means installing Codex leaves the row greyed out forever.
+- The tier-1 row (`c`) has **one** button, `[rename]` — no edit, no delete, no key or URL field
 
-### Test phải gọi SINH CHỮ thật
+### Test with a REAL generation call
 
-**Không** ping reachability. **Không** chỉ check auth.
+**Not** a reachability ping. **Not** an auth check alone.
 
-Đúng endpoint theo từng loại CLI:
+The correct endpoint per CLI kind:
 - Codex `wire_api = "responses"` → `POST /v1/responses`
 - Claude → `/v1/messages`
 
-**Lý do (lỗi #4):** `GET /v1/models` trả `200 OK` chứng minh key hợp lệ — **không** chứng minh gọi được model. Ping sai cửa → dấu tích xanh dối trá.
+**Why (failure #4):** `GET /v1/models` returning `200 OK` proves the key is valid — it proves **nothing** about whether a model can be called. Pinging the wrong door yields a lying green tick.
 
-### Phân loại lỗi — 3 loại, cùng triệu chứng, 3 hành động khác nhau
+### Classify the failure — three kinds, one symptom, three responses
 
-| Triệu chứng | Nghĩa là | Người dùng làm gì |
+| Symptom | Meaning | User action |
 |---|---|---|
-| `401` | Key sai | Dán key khác |
-| `402` | Hết credit | Nạp tiền |
-| Timeout / `500` | Provider chưa map model cho endpoint này | Vào Admin của provider |
+| `401` | Wrong key | Paste a different key |
+| `402` | Out of credit | Top up |
+| Timeout / `500` | Provider has not mapped a model to this endpoint | Fix in the provider's admin panel |
 
-**Loại thứ ba là thứ tốn 20 phút curl** và là tính năng đáng giá nhất app này làm được.
+**The third kind is what cost twenty minutes of `curl`**, and is the most valuable thing this app does.
 
-### Màn hình cuối
+### Final screen
 ```
-✓ cht     — đã test, trả lời sau 1.2s
-✗ cht-cse — key hợp lệ nhưng provider timeout
-⃠ co-ht   — chưa cài Codex CLI
+✓ cht     — tested, replied in 1.2s
+✗ cht-cse — key valid but provider timed out
+⃠ co-ht   — Codex CLI not installed
 
-Đã cài 3 profile. Cấu hình mặc định của `claude` và `codex`
-không đi theo bundle — thiết lập riêng trên máy này nếu cần.
+3 profiles installed. Default `claude` and `codex` configuration does
+not travel in a bundle — set that up separately on this machine.
 ```
-Dòng cuối: không cảnh báo, không màu đỏ. Chỉ là sự thật cần biết.
-
-> Import xong mà không test thì chỉ chuyển **sự không chắc chắn** từ máy này sang máy kia.
+The closing line is not a warning and not red. It is a fact worth knowing.
 
 ---
 
-## 11. Luồng người dùng
+## 11. User flows
 
-### A. Lần đầu, máy trắng
+### A. First run, blank machine
 ```
-Chưa có profile nào.
-  ▸ Nhập từ file bundle
-  ▸ Tạo mới
+No profiles yet.
+  ▸ Scan this machine
+  ▸ Import from a bundle file
+  ▸ Create manually
 ```
-Preset sẵn **Claude** + **Codex** (đổi alias được). Nhập: tên alias · provider (metadata) · base URL · key · tên biến env · mức dangerous · model mapping · wire_api (Codex).
+Presets for **Claude** and **Codex** (alias editable). Manual fields: alias · provider · base URL · key · env var name · danger level · model mapping · wire_api (Codex).
 
-### B. Máy mới, có bundle
+### B. New machine with a bundle
 ```
-Tìm thấy 3 profile: cht · cht-cse · co-ht
-⚠ Chưa cài Codex CLI — co-ht sẽ giữ lại dạng chưa kích hoạt
+Found 3 profiles: cht · cht-cse · co-ht
+⚠ Codex CLI not installed — co-ht will be kept, not activated
 ```
-→ dán key nếu thiếu → cài → test → đóng.
+→ paste any missing keys → install → test → close.
 
-### C. Import lần hai (đồng bộ)
+### C. Second import (sync)
 ```
-9 profile không đổi.
-1 profile khác — cht (key đã thay đổi)  [xem]
+9 profiles unchanged.
+1 differs — cht (key has changed)  [review]
 ```
 
 ---
 
-## 12. Ba nguyên tắc
+## 12. Three principles
 
-> **Bundle lưu ý định, không lưu file.**
-> **"Chưa sẵn sàng" ≠ "bị tắt".**
-> **App sở hữu cái tên, không sở hữu cái được gọi.**
-
----
-
-## 13. Còn để ngỏ
-
-- **Đích lưu bundle** — file trên đĩa hay cơ chế khác (quyết lúc dựng)
-- **Danh sách shell hỗ trợ v1** — zsh chắc chắn; bash / fish / PowerShell tuỳ ưu tiên Windows
-- **Ngăn xếp công nghệ** — chưa bàn
+> **A bundle stores intent, not files.**
+> **"Not ready" ≠ "disabled".**
+> **The app owns the name, not the thing being named.**
 
 ---
 
-## Phụ lục: trạng thái hiện tại trên máy Mac
+## 13. Still open
 
-Cái app này thay thế:
+- **Where bundles live** — a file on disk, or another mechanism (decide during build)
+- **Which shells ship in v1** — zsh certainly; bash / fish / PowerShell depending on Windows priority
+
+---
+
+## 14. Scanning an existing machine
+
+The app must **discover profiles that already exist** and offer them for adoption, so a first run is a confirmation step rather than retyping.
+
+### Read-only, and bounded by §4
+- Reads `~/.claude/profiles/*.json` (Claude overlays) and `~/.codex/*.config.toml` (Codex overlays)
+- **Skips tier 1**: `~/.codex/config.toml` and any Claude overlay with no `ANTHROPIC_BASE_URL` (that means it rides on the user's own Anthropic auth)
+- Writes nothing during a scan
+
+### It reports what is there, not what was intended
+A `defaultMode` sitting at the top level instead of inside `permissions` is reported as **Ask**, not Bypass — because that is what the CLI actually does with it (failure #2). Reporting the intent would launder a broken config into one that looks correct.
+
+### Each profile keeps its own env var
+Codex names the key variable per provider (`MUST1C_HT_API_KEY`, `MUST1C_CSE_API_KEY`). The scanner reads `env_key` from each file rather than assuming a shared name — assuming one is failure #3.
+
+### Codex keys live outside the config
+The TOML names the variable; the value lives elsewhere. The scanner reports the variable name and leaves resolving the value to a step the user confirms.
+
+### Verified against real data
+Run against a live machine, the scanner found all four existing profiles with the correct per-profile env vars:
 
 ```
-~/.claude/settings.json            mặc định toàn máy (Anthropic auth)
-~/.claude/profiles/htmustc.json    overlay, gọi qua --settings
+htcse    Claude  htmustc.id.vn  env=ANTHROPIC_AUTH_TOKEN  danger=Bypass
+htmustc  Claude  htmustc.id.vn  env=ANTHROPIC_AUTH_TOKEN  danger=Bypass
+cse      Codex   htmustc.id.vn  env=MUST1C_CSE_API_KEY    danger=Bypass
+ht       Codex   htmustc.id.vn  env=MUST1C_HT_API_KEY     danger=Bypass
+```
+
+---
+
+## 15. Model setup must be verified, not typed
+
+A profile's model mapping is only correct if the provider actually serves those
+model ids **to this key**. Typing them by hand produces a config that looks
+right and fails at call time.
+
+### Fetch the real list
+`GET /v1/models` on the provider's base URL returns what that key may use. The
+app fetches it during profile setup and offers the ids as a choice rather than a
+free-text field.
+
+### Roles differ per CLI
+- **Claude Code** routes by tier: `ANTHROPIC_DEFAULT_OPUS_MODEL`,
+  `..._SONNET_...`, `..._HAIKU_...`. Opus must resolve; the others fall back.
+- **Codex** has a single default model and no tier concept. Checking tier roles
+  there would be noise.
+
+### Suggesting nothing is a valid answer
+Where a provider serves no model of a family, the app suggests nothing for that
+role. Guessing would recreate the exact failure this guards against.
+
+### Found live on the developer's own machine
+Both Claude profiles are configured for `claude-opus-5`, `claude-sonnet-5` and
+`claude-haiku-4.5`. The provider serves **14 models and not one Claude model
+among them**:
+
+```
+htcse    Claude  configured opus=claude-opus-5
+                 issues: NotServed opus, NotServed sonnet, NotServed haiku
+htmustc  Claude  (identical)
+cse      Codex   configured default=gpt-5.5   issues: none
+ht       Codex   configured default=gpt-5.5   issues: none
+```
+
+Neither CLI reports this. It surfaces only as a failed call, much later — the
+same silent-success shape as evidence #2 and #4.
+
+---
+
+## Appendix: the state this replaces
+
+```
+~/.claude/settings.json            machine-wide default (Anthropic auth)
+~/.claude/profiles/htmustc.json    overlay, invoked via --settings
 ~/.claude/profiles/htcse.json
-~/.codex/config.toml               mặc định + provider must1c
-~/.codex/ht.config.toml            gọi qua --profile ht
+~/.codex/config.toml               default + must1c provider
+~/.codex/ht.config.toml            invoked via --profile ht
 ~/.codex/cse.config.toml
-~/.codex/keys/{ht,cse}             key plaintext, chmod 600
-~/.zshrc                           hàm cp_claude / cuse / cwho / cp_codex + alias
+~/.codex/keys/{ht,cse}             plaintext keys, chmod 600
+~/.zshrc                           cp_claude / cuse / cwho / cp_codex + aliases
 ```
 
-| Alias | CLI | Provider | Trạng thái |
+| Alias | CLI | Provider | State |
 |---|---|---|---|
 | `c` | Claude | Anthropic auth | ✓ bypass on |
 | `cht` | Claude | htmustc | ✓ bypass on |
 | `cht-cse` | Claude | htcse | ✓ bypass on |
-| `codex` | Codex | key cũ | ✗ hết credit |
+| `codex` | Codex | old key | ✗ out of credit |
 | `co-ht` | Codex | htmustc | ✓ yolo on |
 | `co-cse` | Codex | htcse | ✗ provider timeout |

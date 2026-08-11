@@ -1,0 +1,60 @@
+# ---- Node / frontend ----
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# ---- Rust / Tauri ----
+src-tauri/target/
+src-tauri/gen/
+**/*.rs.bk
+*.pdb
+
+# ---- Build output / bundles ----
+*.app
+*.dmg
+*.exe
+*.msi
+*.AppImage
+*.deb
+*.rpm
+release/
+
+# ---- SECRETS: never commit ----
+# Bundle files carry API keys in plaintext by design (internal use).
+# See docs/requirements.md §7 — these must never reach git.
+*.agentport
+*.agentport.json
+**/agentport-bundle*
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!src-tauri/icons/*.png
+
+# ---- Signing / notarization ----
+*.p12
+*.cer
+*.mobileprovision
+.tauri/
+
+# ---- Editors ----
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Logs / temp ----
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.tmp/
+tmp/

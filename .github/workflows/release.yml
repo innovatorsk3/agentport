@@ -1,0 +1,71 @@
+name: release
+
+# Đẩy tag v* -> build cả 3 nền tảng -> tạo GitHub Release (draft)
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false        # 1 nền tảng hỏng không huỷ các nền tảng còn lại
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            label: macos-arm64
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            label: macos-intel
+          - platform: windows-latest
+            target: ''
+            label: windows-x64
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ${{ matrix.label }}
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'agentport ${{ github.ref_name }}'
+          releaseBody: |
+            Tải bản cho hệ điều hành của bạn ở phần Assets bên dưới.
+
+            **macOS** — chưa ký chứng chỉ Apple. Lần đầu mở: chuột phải vào app
+            → Open, hoặc System Settings → Privacy & Security → "Open Anyway".
+
+            **Windows** — chưa ký chứng chỉ. SmartScreen sẽ hiện cảnh báo:
+            More info → Run anyway.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}

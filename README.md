@@ -68,6 +68,56 @@ This is **deliberate** — an internal tool where keys must travel and stay read
 
 Which means: **never commit a bundle file.** `.gitignore` already blocks `*.agentport` and friends, but stay careful anyway.
 
+## Install
+
+Every tagged release publishes builds for macOS, Windows and Linux under stable
+filenames, so a fresh machine can fetch one without opening a browser.
+
+**Windows**
+```powershell
+curl.exe -L -o agentport-setup.exe https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-windows-x64-setup.exe
+.\agentport-setup.exe
+```
+
+**macOS** — Apple Silicon, or swap `arm64` for `intel`
+```bash
+curl -L -o agentport.dmg https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-macos-arm64.dmg
+open agentport.dmg
+```
+
+**Linux**
+```bash
+curl -L -o agentport.AppImage https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-linux-x64.AppImage
+chmod +x agentport.AppImage && ./agentport.AppImage
+```
+
+### Neither build is signed
+
+**Windows** — SmartScreen blocks the first run: *More info → Run anyway*.
+**macOS** — right-click the app → *Open*, or System Settings → Privacy &
+Security → *Open Anyway*.
+
+A code-signing certificate is the only thing that removes those prompts; for an
+internal tool it is not worth the yearly fee. macOS builds are ad-hoc signed so
+Apple Silicon does not report them as *damaged*, which reads as a corrupt
+download rather than a security prompt.
+
+## Carrying a setup to a new machine
+
+On the machine that already works:
+
+1. Open agentport — it scans and offers the profiles it finds
+2. **Export bundle** → save the `.agentport` file
+
+On the new machine:
+
+3. Download and run agentport
+4. **Import a bundle** → pick that file
+5. **Install** → it writes the config, registers one line in your shell rc, and
+   tests every profile against its provider
+
+Open a new terminal and your aliases are there.
+
 ## Documentation
 
 - [Requirements](docs/requirements.md) — full specification, with the evidence behind each decision

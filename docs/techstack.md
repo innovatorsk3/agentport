@@ -112,11 +112,33 @@ cd src-tauri && cargo test    # Rust unit tests
 |---|---|---|---|
 | macOS Apple Silicon | `macos-latest` | `aarch64-apple-darwin` | `.dmg`, `.app` |
 | macOS Intel | `macos-latest` | `x86_64-apple-darwin` | `.dmg`, `.app` |
-| Windows x64 | `windows-latest` | default | `.exe` (NSIS) |
+| Windows x64 | `windows-latest` | `x86_64-pc-windows-msvc` | `.exe` (NSIS) |
+| Linux x64 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` | `.AppImage`, `.deb` |
 
 Uses `tauri-apps/tauri-action@v1`, triggered by pushing a `v*` tag.
 
 `fail-fast: false` — one platform failing does not cancel the others.
+
+### Stable download URLs
+
+`tauri-action` names artifacts after the app version — `agentport_0.1.0_x64-setup.exe`
+— so the filename moves with every release and cannot be fetched blind. A second
+upload step copies each artifact to a fixed, platform-labelled name:
+
+```
+agentport-windows-x64-setup.exe
+agentport-macos-arm64.dmg
+agentport-macos-intel.dmg
+agentport-linux-x64.AppImage
+agentport-linux-x64.deb
+```
+
+That is what makes `releases/latest/download/<name>` resolve, so a fresh machine
+can `curl` a build without opening a browser.
+
+The release is **published, not drafted**. A draft is invisible to
+`latest/download` and to anyone but the repository owner — which would defeat the
+purpose.
 
 ### Signing — v1 is unsigned
 

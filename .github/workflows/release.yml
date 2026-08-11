@@ -1,11 +1,16 @@
 name: release
 
-# Push a v* tag -> build all three platforms -> create a draft GitHub Release
+# Push a v* tag -> build every platform -> publish a GitHub Release.
+#
 #   git tag v0.1.0 && git push origin v0.1.0
+#
+# The release is published, not drafted, so `curl -L .../latest/download/<name>`
+# resolves. A draft release is invisible to that URL and to anyone but the repo
+# owner, which would defeat the point of downloading it on a fresh machine.
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -14,7 +19,7 @@ permissions:
 jobs:
   build:
     strategy:
-      fail-fast: false        # one platform failing must not cancel the others
+      fail-fast: false # one platform failing must not cancel the others
       matrix:
         include:
           - platform: macos-latest
@@ -24,13 +29,26 @@ jobs:
             target: x86_64-apple-darwin
             label: macos-intel
           - platform: windows-latest
-            target: ''
+            target: x86_64-pc-windows-msvc
             label: windows-x64
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: linux-x64
 
     runs-on: ${{ matrix.platform }}
 
     steps:
       - uses: actions/checkout@v4
+
+      # Tauri on Linux needs the system webview and its build dependencies.
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            patchelf build-essential curl wget file libssl-dev \
+            libgtk-3-dev libayatana-appindicator3-dev
 
       - uses: pnpm/action-setup@v4
         with:
@@ -47,26 +65,82 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
+          workspaces: "./src-tauri -> target"
           key: ${{ matrix.label }}
 
       - run: pnpm install --frozen-lockfile
 
       - uses: tauri-apps/tauri-action@v1
+        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'agentport ${{ github.ref_name }}'
+          releaseName: "agentport ${{ github.ref_name }}"
           releaseBody: |
-            Download the build for your operating system from Assets below.
+            Download the build for your machine below, or fetch it directly.
 
-            **macOS** — not signed with an Apple certificate. On first launch:
-            right-click the app → Open, or System Settings → Privacy & Security
-            → "Open Anyway".
+            **Windows**
+            ```powershell
+            curl.exe -L -o agentport-setup.exe https://github.com/${{ github.repository }}/releases/latest/download/agentport-windows-x64-setup.exe
+            ```
 
-            **Windows** — not signed. SmartScreen will warn:
-            More info → Run anyway.
-          releaseDraft: true
+            **macOS (Apple Silicon)**
+            ```bash
+            curl -L -o agentport.dmg https://github.com/${{ github.repository }}/releases/latest/download/agentport-macos-arm64.dmg
+            ```
+
+            **macOS (Intel)**
+            ```bash
+            curl -L -o agentport.dmg https://github.com/${{ github.repository }}/releases/latest/download/agentport-macos-intel.dmg
+            ```
+
+            ---
+
+            Neither build is code-signed.
+
+            **Windows** — SmartScreen will warn on first run: *More info → Run anyway*.
+            **macOS** — right-click the app → Open, or System Settings → Privacy & Security → *Open Anyway*.
+          releaseDraft: false
           prerelease: false
-          args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+          args: --target ${{ matrix.target }}
+
+      # tauri-action names its artifacts after the app version, e.g.
+      # `agentport_0.1.0_x64-setup.exe`. A stable name is what makes
+      # `releases/latest/download/<name>` work, so each artifact is uploaded a
+      # second time under a fixed, platform-labelled filename.
+      - name: Upload stable-named assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          LABEL: ${{ matrix.label }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          root="src-tauri/target/${{ matrix.target }}/release/bundle"
+
+          upload() {
+            local src="$1" name="$2"
+            [ -f "$src" ] || return 0
+            cp "$src" "/tmp/$name"
+            echo "uploading $name"
+            gh release upload "$TAG" "/tmp/$name" --repo "$REPO" --clobber
+          }
+
+          case "$LABEL" in
+            windows-x64)
+              upload "$(find "$root/nsis" -name '*-setup.exe' | head -1)" \
+                     "agentport-windows-x64-setup.exe"
+              ;;
+            macos-*)
+              upload "$(find "$root/dmg" -name '*.dmg' | head -1)" \
+                     "agentport-$LABEL.dmg"
+              ;;
+            linux-x64)
+              upload "$(find "$root/appimage" -name '*.AppImage' | head -1)" \
+                     "agentport-linux-x64.AppImage"
+              upload "$(find "$root/deb" -name '*.deb' | head -1)" \
+                     "agentport-linux-x64.deb"
+              ;;
+          esac

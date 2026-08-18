@@ -55,6 +55,8 @@ fn rc_paths() -> Result<Vec<PathBuf>, String> {
 /// PowerShell 5 and PowerShell 7 use different profile directories, and
 /// Documents may be redirected to OneDrive or another known-folder location.
 /// Asking each executable for `$PROFILE` handles both cases without guessing.
+/// The value is returned as UTF-16LE hex because Windows PowerShell can emit
+/// localized paths through the console code page rather than UTF-8.
 fn powershell_profile_paths(home: &Path) -> Vec<PathBuf> {
     let fallback = home
         .join("Documents")
@@ -63,21 +65,9 @@ fn powershell_profile_paths(home: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     for executable in ["pwsh.exe", "powershell.exe"] {
-        let Ok(output) = Command::new(executable)
-            .args(["-NoProfile", "-NonInteractive", "-Command", "$PROFILE"])
-            .output()
-        else {
+        let Some(path) = powershell_profile_path(executable) else {
             continue;
         };
-        if !output.status.success() {
-            continue;
-        }
-        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !path.to_ascii_lowercase().ends_with(".ps1") {
-            continue;
-        }
-
-        let path = PathBuf::from(path);
         if !paths.iter().any(|existing| existing == &path) {
             paths.push(path);
         }
@@ -87,6 +77,55 @@ fn powershell_profile_paths(home: &Path) -> Vec<PathBuf> {
         paths.push(fallback);
     }
     paths
+}
+
+fn powershell_profile_path(executable: &str) -> Option<PathBuf> {
+    let output = Command::new(executable)
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "[BitConverter]::ToString([Text.Encoding]::Unicode.GetBytes($PROFILE)).Replace('-', '')",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let encoded = std::str::from_utf8(&output.stdout).ok()?.trim();
+    decode_utf16_hex(encoded).filter(|path| {
+        path.to_string_lossy()
+            .to_ascii_lowercase()
+            .ends_with(".ps1")
+    })
+}
+
+/// Decodes the ASCII hex emitted by PowerShell back into a Windows path.
+/// Keeping this independent from the active Windows console code page is what
+/// preserves localized folders such as `Tài liệu`.
+fn decode_utf16_hex(encoded: &str) -> Option<PathBuf> {
+    if encoded.is_empty() || !encoded.len().is_multiple_of(4) {
+        return None;
+    }
+
+    let bytes = encoded
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let high = (pair[0] as char).to_digit(16)? as u8;
+            let low = (pair[1] as char).to_digit(16)? as u8;
+            Some((high << 4) | low)
+        })
+        .collect::<Option<Vec<_>>>()?;
+
+    let units = bytes
+        .chunks_exact(2)
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .collect::<Vec<_>>();
+    let path = String::from_utf16(&units).ok()?;
+    let path = path.trim();
+    (!path.is_empty()).then(|| PathBuf::from(path))
 }
 
 // ---- detection & scanning ------------------------------------------------
@@ -308,4 +347,28 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decodes_localized_profile_paths_without_console_encoding() {
+        let original = r"C:\Users\ADMIN\OneDrive\Tài liệu\WindowsPowerShell\Microsoft.PowerShell_profile.ps1";
+        let encoded = original
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .map(|byte| format!("{byte:02X}"))
+            .collect::<String>();
+
+        assert_eq!(decode_utf16_hex(&encoded), Some(PathBuf::from(original)));
+    }
+
+    #[test]
+    fn rejects_non_hex_or_malformed_profile_output() {
+        assert!(decode_utf16_hex("not-a-path").is_none());
+        assert!(decode_utf16_hex("ZZZZ").is_none());
+        assert!(decode_utf16_hex("410").is_none());
+    }
 }

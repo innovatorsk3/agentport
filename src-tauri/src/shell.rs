@@ -91,6 +91,10 @@ pub fn ensure_rc_line(rc_path: &Path, home: &Path, shell: ShellKind) -> Result<R
     out.push_str(&rc_line(home, shell));
     out.push('\n');
 
+    if let Some(parent) = rc_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+    }
     fs::write(rc_path, out).map_err(|e| format!("cannot write {}: {e}", rc_path.display()))?;
     Ok(RcOutcome::Added)
 }
@@ -371,6 +375,22 @@ mod tests {
             RcOutcome::Added
         );
         assert!(rc.exists());
+    }
+
+    #[test]
+    fn creates_missing_rc_parent_directories() {
+        let home = tmpdir("rc_parent");
+        let rc = home
+            .join("Documents")
+            .join("PowerShell")
+            .join("Microsoft.PowerShell_profile.ps1");
+
+        assert_eq!(
+            ensure_rc_line(&rc, &home, ShellKind::PowerShell).unwrap(),
+            RcOutcome::Added
+        );
+        assert!(rc.exists());
+        assert!(fs::read_to_string(rc).unwrap().contains("profiles.ps1"));
     }
 
     // ---- the generated script -------------------------------------------

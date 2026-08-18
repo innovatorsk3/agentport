@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/Icons";
 import {
+  CLAUDE_AUTH_ENV,
   DANGER_LABELS,
   dangerLevelsFor,
   PRESETS,
@@ -46,7 +47,10 @@ function blank(cli: CliKind): Profile {
 /** Opens inline beneath the list rather than as its own screen, so the context
  *  stays on screen and there is no way to get stranded. */
 export function ProfileForm({ initial, onSave, onCancel }: Props) {
-  const [p, setP] = useState<Profile>(initial ?? blank("claude"));
+  const [p, setP] = useState<Profile>(() => {
+    const value = initial ?? blank("claude");
+    return value.cli === "claude" ? { ...value, env_var: CLAUDE_AUTH_ENV } : value;
+  });
   const [aliasError, setAliasError] = useState<string | null>(null);
   const [shadows, setShadows] = useState(false);
   const [models, setModels] = useState<ModelInfo[] | null>(null);
@@ -110,7 +114,17 @@ export function ProfileForm({ initial, onSave, onCancel }: Props) {
   }
 
   const canLoadModels = p.base_url.length > 0 && p.api_key.length > 0;
-  const canSave = !aliasError && p.alias && p.provider && p.base_url && p.api_key;
+  const requiredModel = p.cli === "claude" ? p.model_map.opus : p.model_map.default;
+  const canSave =
+    !aliasError &&
+    !issues.length &&
+    /^[A-Za-z_][A-Za-z0-9_]*$/.test(p.env_var) &&
+    /^https?:\/\/[^\s]+$/i.test(p.base_url) &&
+    p.alias &&
+    p.provider &&
+    p.base_url &&
+    p.api_key.trim() &&
+    requiredModel?.trim();
 
   const roles: Array<[keyof Profile["model_map"], string]> =
     p.cli === "claude"
@@ -200,9 +214,15 @@ export function ProfileForm({ initial, onSave, onCancel }: Props) {
           <Input
             value={p.env_var}
             onChange={(e) => set("env_var", e.target.value)}
+            disabled={p.cli === "claude"}
             spellCheck={false}
             className="font-mono text-xs"
           />
+          {p.cli === "claude" && (
+            <p className="text-muted-foreground/80 text-xs leading-relaxed">
+              Claude Code requires {CLAUDE_AUTH_ENV}; Codex can use one variable per profile.
+            </p>
+          )}
         </Field>
 
         <Field
@@ -287,7 +307,12 @@ export function ProfileForm({ initial, onSave, onCancel }: Props) {
                     : null
                 }
                 warn={
-                  issue?.kind === "unset" ? "Required — nothing runs without it." : null
+                  issue?.kind === "unset" ||
+                  (!value &&
+                    ((p.cli === "claude" && role === "opus") ||
+                      (p.cli === "codex" && role === "default")))
+                    ? "Required — nothing runs without it."
+                    : null
                 }
               >
                 {models ? (

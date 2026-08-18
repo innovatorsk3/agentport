@@ -48,10 +48,11 @@ pub struct ModelMap {
 }
 
 /// Where a profile came from — used by the first-run scan (requirements §14).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Origin {
     /// Typed into the app by hand.
+    #[default]
     Manual,
     /// Read out of an imported bundle.
     Imported,
@@ -59,17 +60,17 @@ pub enum Origin {
     Scanned,
 }
 
-impl Default for Origin {
-    fn default() -> Self {
-        Origin::Manual
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Profile {
     /// Alias name — this is also what gets TYPED in a terminal, so it must not
     /// contain spaces (§6).
     pub alias: String,
+
+    /// The named profile/config file consumed by the CLI. Existing setups can
+    /// use a different shell alias, e.g. `co-ht` -> `codex --profile ht`.
+    /// `None` keeps older bundles and manually-created profiles compatible.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_name: Option<String>,
 
     pub cli: CliKind,
 
@@ -101,6 +102,12 @@ pub struct Profile {
 }
 
 impl Profile {
+    /// Returns the CLI profile name, falling back to the alias for profiles
+    /// created before shell aliases and named profiles were separated.
+    pub fn cli_profile_name(&self) -> &str {
+        self.profile_name.as_deref().unwrap_or(&self.alias)
+    }
+
     /// IDENTITY = provider + base_url + cli (§9).
     ///
     /// Import compares this, NOT the alias — two profiles sharing a name can be
@@ -117,7 +124,10 @@ impl Profile {
     pub fn is_identical_to(&self, other: &Profile) -> bool {
         self.identity() == other.identity()
             && self.api_key == other.api_key
+            && self.env_var == other.env_var
             && self.danger == other.danger
+            && self.model_map == other.model_map
+            && self.wire_api == other.wire_api
     }
 }
 
@@ -129,7 +139,10 @@ pub struct Bundle {
 
 impl Bundle {
     pub fn new(profiles: Vec<Profile>) -> Self {
-        Self { version: BUNDLE_VERSION, profiles }
+        Self {
+            version: BUNDLE_VERSION,
+            profiles,
+        }
     }
 }
 
@@ -143,5 +156,7 @@ pub enum ProfileState {
     Ready,
     /// "not ready" — NOT "disabled". The user never turned it off; the machine
     /// is missing the CLI. Different wording drives a different next action.
-    CliMissing { cli: CliKind },
+    CliMissing {
+        cli: CliKind,
+    },
 }

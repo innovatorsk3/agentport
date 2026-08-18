@@ -125,7 +125,10 @@ pub fn classify_status(status: u16, body: &str) -> ProbeResult {
         429 => ProbeResult::Other { status, detail },
         404 if mentions_model(body) => ProbeResult::ModelUnavailable { detail },
         500..=599 => ProbeResult::ModelUnavailable { detail },
-        other => ProbeResult::Other { status: other, detail },
+        other => ProbeResult::Other {
+            status: other,
+            detail,
+        },
     }
 }
 
@@ -213,6 +216,7 @@ mod tests {
     fn profile(cli: CliKind, wire: Option<&str>) -> Profile {
         Profile {
             alias: "t".into(),
+            profile_name: None,
             cli,
             provider: "htmustc.id.vn".into(),
             base_url: "https://htmustc.id.vn/v1".into(),
@@ -246,8 +250,10 @@ mod tests {
 
     #[test]
     fn picks_the_endpoint_matching_the_wire_api() {
-        assert!(generation_endpoint(&profile(CliKind::Codex, Some("responses")))
-            .ends_with("/v1/responses"));
+        assert!(
+            generation_endpoint(&profile(CliKind::Codex, Some("responses")))
+                .ends_with("/v1/responses")
+        );
         assert!(generation_endpoint(&profile(CliKind::Codex, Some("chat")))
             .ends_with("/v1/chat/completions"));
         assert!(generation_endpoint(&profile(CliKind::Claude, None)).ends_with("/v1/messages"));
@@ -263,7 +269,10 @@ mod tests {
     fn a_trailing_slash_does_not_double_up() {
         let mut p = profile(CliKind::Codex, Some("responses"));
         p.base_url = "https://htmustc.id.vn/v1/".into();
-        assert_eq!(generation_endpoint(&p), "https://htmustc.id.vn/v1/responses");
+        assert_eq!(
+            generation_endpoint(&p),
+            "https://htmustc.id.vn/v1/responses"
+        );
     }
 
     /// Found by probing a live provider: appending `/v1/messages` to a base URL
@@ -331,7 +340,9 @@ mod tests {
             advice(&classify_status(401, "")),
             advice(&classify_status(402, "")),
             advice(&classify_status(500, "")),
-            advice(&ProbeResult::Unreachable { detail: String::new() }),
+            advice(&ProbeResult::Unreachable {
+                detail: String::new(),
+            }),
         ];
         for (i, a) in advices.iter().enumerate() {
             for (j, b) in advices.iter().enumerate() {

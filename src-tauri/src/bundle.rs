@@ -1,6 +1,6 @@
 //! Bundle export / import — compares IDENTITY, not name (requirements §9).
 
-use crate::model::{Bundle, Profile};
+use crate::model::{Bundle, Profile, BUNDLE_VERSION};
 use serde::Serialize;
 
 /// What to do with one incoming profile, given what already exists locally.
@@ -13,6 +13,19 @@ pub enum ImportPlan {
     Add { alias: String },
     /// Same name but DIFFERENT thing → auto-rename, no prompt.
     Rename { from: String, to: String },
+}
+
+pub fn validate_bundle(bundle: &Bundle) -> Result<(), String> {
+    if bundle.version != BUNDLE_VERSION {
+        return Err(format!(
+            "unsupported bundle version {} (this app supports {})",
+            bundle.version, BUNDLE_VERSION
+        ));
+    }
+    if bundle.profiles.is_empty() {
+        return Err("bundle contains no profiles".into());
+    }
+    Ok(())
 }
 
 /// Picks a free alias when the name is taken: `cht` → `cht-1` → `cht-2`.
@@ -32,23 +45,34 @@ fn next_free_alias(base: &str, taken: &[String]) -> String {
 /// Plans an import. Runs straight through — NO prompts.
 pub fn plan_import(incoming: &Bundle, existing: &[Profile]) -> Vec<ImportPlan> {
     let mut taken: Vec<String> = existing.iter().map(|p| p.alias.clone()).collect();
+    let mut known = existing.to_vec();
     let mut plans = Vec::new();
 
     for inc in &incoming.profiles {
         // 1. Do we already hold something IDENTICAL? (regardless of its name)
-        if existing.iter().any(|e| e.is_identical_to(inc)) {
-            plans.push(ImportPlan::Skip { alias: inc.alias.clone() });
+        if known.iter().any(|e| e.is_identical_to(inc)) {
+            plans.push(ImportPlan::Skip {
+                alias: inc.alias.clone(),
+            });
             continue;
         }
 
         // 2. Is the name taken by something else?
         let free = next_free_alias(&inc.alias, &taken);
         if free == inc.alias {
-            plans.push(ImportPlan::Add { alias: free.clone() });
+            plans.push(ImportPlan::Add {
+                alias: free.clone(),
+            });
         } else {
-            plans.push(ImportPlan::Rename { from: inc.alias.clone(), to: free.clone() });
+            plans.push(ImportPlan::Rename {
+                from: inc.alias.clone(),
+                to: free.clone(),
+            });
         }
-        taken.push(free);
+        taken.push(free.clone());
+        let mut imported = inc.clone();
+        imported.alias = free;
+        known.push(imported);
     }
 
     plans
@@ -62,6 +86,7 @@ mod tests {
     fn profile(alias: &str, provider: &str, key: &str) -> Profile {
         Profile {
             alias: alias.into(),
+            profile_name: None,
             cli: CliKind::Claude,
             provider: provider.into(),
             base_url: format!("https://{provider}.example/v1"),
@@ -82,7 +107,12 @@ mod tests {
         let incoming = Bundle::new(vec![profile("cht", "htmustc", "k1")]);
 
         let plans = plan_import(&incoming, &existing);
-        assert_eq!(plans, vec![ImportPlan::Skip { alias: "cht".into() }]);
+        assert_eq!(
+            plans,
+            vec![ImportPlan::Skip {
+                alias: "cht".into()
+            }]
+        );
     }
 
     /// Same name, different provider = a real conflict, so rename.
@@ -94,7 +124,10 @@ mod tests {
         let plans = plan_import(&incoming, &existing);
         assert_eq!(
             plans,
-            vec![ImportPlan::Rename { from: "cht".into(), to: "cht-1".into() }]
+            vec![ImportPlan::Rename {
+                from: "cht".into(),
+                to: "cht-1".into()
+            }]
         );
     }
 
@@ -112,7 +145,10 @@ mod tests {
         let plans = plan_import(&incoming, &existing);
         assert_eq!(
             plans,
-            vec![ImportPlan::Rename { from: "cht".into(), to: "cht-1".into() }]
+            vec![ImportPlan::Rename {
+                from: "cht".into(),
+                to: "cht-1".into()
+            }]
         );
     }
 
@@ -124,7 +160,12 @@ mod tests {
         let incoming = Bundle::new(vec![profile("co-other", "otherprov", "k9")]);
 
         let plans = plan_import(&incoming, &existing);
-        assert_eq!(plans, vec![ImportPlan::Add { alias: "co-other".into() }]);
+        assert_eq!(
+            plans,
+            vec![ImportPlan::Add {
+                alias: "co-other".into()
+            }]
+        );
     }
 
     /// Same identity + same key under a DIFFERENT name is still identical —
@@ -136,7 +177,12 @@ mod tests {
         let incoming = Bundle::new(vec![profile("claude-ht", "htmustc", "k1")]);
 
         let plans = plan_import(&incoming, &existing);
-        assert_eq!(plans, vec![ImportPlan::Skip { alias: "claude-ht".into() }]);
+        assert_eq!(
+            plans,
+            vec![ImportPlan::Skip {
+                alias: "claude-ht".into()
+            }]
+        );
     }
 
     /// A generated alias must be typeable at a shell prompt.
@@ -168,9 +214,49 @@ mod tests {
         assert_eq!(
             plans,
             vec![
-                ImportPlan::Rename { from: "cht".into(), to: "cht-1".into() },
-                ImportPlan::Rename { from: "cht".into(), to: "cht-2".into() },
+                ImportPlan::Rename {
+                    from: "cht".into(),
+                    to: "cht-1".into()
+                },
+                ImportPlan::Rename {
+                    from: "cht".into(),
+                    to: "cht-2".into()
+                },
             ]
+        );
+    }
+
+    #[test]
+    fn duplicate_profiles_inside_one_bundle_are_skipped() {
+        let incoming = Bundle::new(vec![
+            profile("cht", "htmustc", "k1"),
+            profile("cht", "htmustc", "k1"),
+        ]);
+        assert_eq!(
+            plan_import(&incoming, &[]),
+            vec![
+                ImportPlan::Add {
+                    alias: "cht".into()
+                },
+                ImportPlan::Skip {
+                    alias: "cht".into()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn changed_model_mapping_is_not_treated_as_identical() {
+        let existing = profile("cht", "htmustc", "k1");
+        let mut incoming_profile = existing.clone();
+        incoming_profile.model_map.default = Some("new-model".into());
+        let plans = plan_import(&Bundle::new(vec![incoming_profile]), &[existing]);
+        assert_eq!(
+            plans,
+            vec![ImportPlan::Rename {
+                from: "cht".into(),
+                to: "cht-1".into()
+            }]
         );
     }
 }

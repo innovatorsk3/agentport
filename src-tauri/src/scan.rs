@@ -12,9 +12,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn home() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+    #[cfg(windows)]
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
+    #[cfg(not(windows))]
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+
+    home.map(PathBuf::from)
 }
 
 /// Reads Claude overlay profiles from `~/.claude/profiles/*.json`.
@@ -52,17 +55,27 @@ pub fn scan_claude_dir(dir: &Path) -> Vec<Profile> {
 
         found.push(Profile {
             alias: stem.to_string(),
+            profile_name: None,
             cli: CliKind::Claude,
             provider: provider_from_url(base_url),
             base_url: base_url.to_string(),
-            api_key: env["ANTHROPIC_AUTH_TOKEN"].as_str().unwrap_or_default().to_string(),
+            api_key: env["ANTHROPIC_AUTH_TOKEN"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
             // Claude reads the key from a fixed variable, unlike Codex.
             env_var: "ANTHROPIC_AUTH_TOKEN".to_string(),
             danger: claude_danger(&json),
             model_map: ModelMap {
-                opus: env["ANTHROPIC_DEFAULT_OPUS_MODEL"].as_str().map(str::to_string),
-                sonnet: env["ANTHROPIC_DEFAULT_SONNET_MODEL"].as_str().map(str::to_string),
-                haiku: env["ANTHROPIC_DEFAULT_HAIKU_MODEL"].as_str().map(str::to_string),
+                opus: env["ANTHROPIC_DEFAULT_OPUS_MODEL"]
+                    .as_str()
+                    .map(str::to_string),
+                sonnet: env["ANTHROPIC_DEFAULT_SONNET_MODEL"]
+                    .as_str()
+                    .map(str::to_string),
+                haiku: env["ANTHROPIC_DEFAULT_HAIKU_MODEL"]
+                    .as_str()
+                    .map(str::to_string),
                 default: json["model"].as_str().map(str::to_string),
             },
             wire_api: None,
@@ -113,13 +126,14 @@ pub fn scan_codex_dir(dir: &Path) -> Vec<Profile> {
 
         found.push(Profile {
             alias: stem.to_string(),
+            profile_name: None,
             cli: CliKind::Codex,
             provider: provider_from_url(&base_url),
             base_url,
             // The key lives outside the TOML, in whatever `env_key` names. The
             // scanner reports what it found; resolving the value is a separate
             // step the user confirms.
-            api_key: String::new(),
+            api_key: std::env::var(&env_var).unwrap_or_default(),
             env_var,
             danger: codex_danger(&text),
             model_map: ModelMap {
@@ -148,57 +162,39 @@ fn codex_danger(text: &str) -> DangerLevel {
     }
 }
 
-/// Pulls `base_url` / `env_key` / `wire_api` out of the `[model_providers.*]`
-/// table.
-///
-/// Deliberately a line scanner rather than a full TOML parse: these files are
-/// hand-edited and may carry unrelated tables (hook state, trust hashes) that a
-/// strict parse would have to model. Only the fields below matter here.
+/// Pulls `base_url` / `env_key` / `wire_api` out of the selected
+/// `[model_providers.*]` table. TOML parsing is safe here: unknown hook and
+/// project tables are values, not a schema this module needs to model.
 fn codex_provider_block(text: &str) -> Option<(String, String, Option<String>)> {
-    let mut inside = false;
-    let mut base_url = None;
-    let mut env_key = None;
-    let mut wire_api = None;
+    let document = toml::from_str::<toml::Value>(text).ok()?;
+    let providers = document.get("model_providers")?.as_table()?;
+    let selected_name = document.get("model_provider").and_then(toml::Value::as_str);
+    let provider = selected_name
+        .and_then(|name| providers.get(name))
+        .or_else(|| {
+            providers
+                .values()
+                .find(|value| value.get("base_url").is_some())
+        })?
+        .as_table()?;
 
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') {
-            inside = trimmed.starts_with("[model_providers.");
-            continue;
-        }
-        if !inside {
-            continue;
-        }
-        if let Some(v) = scalar_on_line(trimmed, "base_url") {
-            base_url = Some(v);
-        } else if let Some(v) = scalar_on_line(trimmed, "env_key") {
-            env_key = Some(v);
-        } else if let Some(v) = scalar_on_line(trimmed, "wire_api") {
-            wire_api = Some(v);
-        }
-    }
-
-    Some((base_url?, env_key?, wire_api))
+    Some((
+        provider.get("base_url")?.as_str()?.to_string(),
+        provider.get("env_key")?.as_str()?.to_string(),
+        provider
+            .get("wire_api")
+            .and_then(toml::Value::as_str)
+            .map(str::to_string),
+    ))
 }
 
 /// Finds a top-level `key = "value"` (outside any table header).
 fn toml_scalar(text: &str, key: &str) -> Option<String> {
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') {
-            break; // top-level scalars all precede the first table
-        }
-        if let Some(v) = scalar_on_line(trimmed, key) {
-            return Some(v);
-        }
-    }
-    None
-}
-
-fn scalar_on_line(line: &str, key: &str) -> Option<String> {
-    let rest = line.strip_prefix(key)?.trim_start();
-    let rest = rest.strip_prefix('=')?.trim();
-    Some(rest.trim_matches('"').to_string())
+    toml::from_str::<toml::Value>(text)
+        .ok()?
+        .get(key)
+        .and_then(toml::Value::as_str)
+        .map(str::to_string)
 }
 
 /// Derives a readable provider label from a base URL host.
@@ -220,9 +216,198 @@ pub fn scan_machine() -> Vec<Profile> {
     let Some(h) = home() else {
         return Vec::new();
     };
+    scan_machine_at(&h)
+}
+
+pub fn scan_machine_at(h: &Path) -> Vec<Profile> {
     let mut all = scan_claude_dir(&h.join(".claude").join("profiles"));
     all.extend(scan_codex_dir(&h.join(".codex")));
+    let shell_aliases = scan_shell_aliases(h);
+    for profile in &mut all {
+        let cli_profile_name = profile.alias.clone();
+        if let Some(alias) = shell_aliases.iter().find(|candidate| {
+            candidate.cli == profile.cli && candidate.profile_name == cli_profile_name
+        }) {
+            profile.alias = alias.alias.clone();
+            profile.profile_name = Some(cli_profile_name);
+        }
+    }
+    for profile in &mut all {
+        if profile.cli == CliKind::Codex && profile.api_key.is_empty() {
+            let cli_profile_name = profile.cli_profile_name().to_string();
+            profile.api_key = find_key_file(h, &cli_profile_name)
+                .or_else(|| find_key_in_shell_files(h, &profile.env_var))
+                .unwrap_or_default();
+        }
+    }
+    all.sort_by(|a, b| a.alias.cmp(&b.alias));
     all
+}
+
+/// Some existing Codex wrappers keep one key per named profile instead of
+/// exporting it in the shell. Read that file only to populate the in-memory
+/// profile for export; the app never rewrites or prints it.
+fn find_key_file(home: &Path, profile_name: &str) -> Option<String> {
+    let path = home.join(".codex").join("keys").join(profile_name);
+    fs::read_to_string(path)
+        .ok()
+        .map(|key| key.trim().to_string())
+        .filter(|key| !key.is_empty())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ShellAlias {
+    alias: String,
+    cli: CliKind,
+    profile_name: String,
+}
+
+/// Reads the user's explicit aliases that point at a named Claude/Codex
+/// profile. The config filename is the CLI profile name; the shell alias is
+/// what the user expects to see and type, such as `co-ht`.
+fn scan_shell_aliases(home: &Path) -> Vec<ShellAlias> {
+    let candidates = [home.join(".zshrc"), home.join(".bashrc")];
+    candidates
+        .iter()
+        .filter_map(|path| fs::read_to_string(path).ok())
+        .flat_map(|text| parse_shell_aliases(&text))
+        .collect()
+}
+
+fn parse_shell_aliases(text: &str) -> Vec<ShellAlias> {
+    let mut found = Vec::new();
+    for line in text.lines() {
+        let Some(rest) = line.trim().strip_prefix("alias ") else {
+            continue;
+        };
+        let rest = rest.strip_prefix("-- ").unwrap_or(rest);
+        let Some((alias, value)) = rest.split_once('=') else {
+            continue;
+        };
+        let alias = alias.trim();
+        if alias.is_empty() || alias.chars().any(|c| c.is_whitespace()) {
+            continue;
+        }
+        let Some(command) = parse_shell_value(value) else {
+            continue;
+        };
+        let mut parts = command.split_whitespace();
+        let Some(wrapper) = parts.next() else {
+            continue;
+        };
+        let Some(profile_name) = parts.next() else {
+            continue;
+        };
+        if parts.next().is_some() {
+            continue;
+        }
+
+        let cli = match wrapper {
+            "cp_claude" => CliKind::Claude,
+            "cp_codex" => CliKind::Codex,
+            _ => continue,
+        };
+        found.push(ShellAlias {
+            alias: alias.to_string(),
+            cli,
+            profile_name: profile_name.to_string(),
+        });
+    }
+    found
+}
+
+/// GUI apps launched from Finder/Explorer do not inherit the user's shell
+/// exports. Recover keys from the generated script and simple profile
+/// assignments so a scanned Codex profile can actually be exported.
+fn find_key_in_shell_files(home: &Path, env_var: &str) -> Option<String> {
+    let candidates = [
+        home.join(".agentport/profiles.sh"),
+        home.join(".agentport/profiles.ps1"),
+        home.join(".zshrc"),
+        home.join(".bashrc"),
+        home.join("Documents/PowerShell/Microsoft.PowerShell_profile.ps1"),
+        home.join("Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1"),
+    ];
+
+    candidates
+        .iter()
+        .filter_map(|path| fs::read_to_string(path).ok())
+        .find_map(|text| find_key_assignment(&text, env_var))
+}
+
+fn find_key_assignment(text: &str, env_var: &str) -> Option<String> {
+    for line in text.lines() {
+        let trimmed = line.trim();
+        let assignment = trimmed
+            .strip_prefix("export ")
+            .unwrap_or(trimmed)
+            .strip_prefix(env_var)
+            .and_then(|rest| rest.strip_prefix('='));
+
+        if let Some(value) = assignment.and_then(parse_shell_value) {
+            return Some(value);
+        }
+
+        let ps = trimmed
+            .strip_prefix("$env:")
+            .and_then(|rest| rest.strip_prefix(env_var))
+            .and_then(|rest| rest.trim_start().strip_prefix('='));
+        if let Some(value) = ps.and_then(parse_shell_value) {
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn parse_shell_value(value: &str) -> Option<String> {
+    let value = value.trim_start();
+    if let Some(value) = value.strip_prefix('"') {
+        let mut out = String::new();
+        let mut escaped = false;
+        for ch in value.chars() {
+            if escaped {
+                out.push(ch);
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                return Some(out);
+            } else {
+                out.push(ch);
+            }
+        }
+        return None;
+    }
+    if !value.starts_with('\'') {
+        return value
+            .split_whitespace()
+            .next()
+            .filter(|v| !v.is_empty())
+            .map(str::to_string);
+    }
+
+    let mut out = String::new();
+    let mut i = 1;
+    while i < value.len() {
+        let rest = &value[i..];
+        if rest.starts_with("'\\''") {
+            out.push('\'');
+            i += 4;
+            continue;
+        }
+        if rest.starts_with("''") {
+            out.push('\'');
+            i += 2;
+            continue;
+        }
+        let ch = rest.chars().next()?;
+        if ch == '\'' {
+            return Some(out);
+        }
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    None
 }
 
 #[cfg(test)]
@@ -353,6 +538,25 @@ wire_api = "responses"
         assert_eq!(p.model_map.default.as_deref(), Some("gpt-5.5"));
     }
 
+    #[test]
+    fn follows_the_selected_codex_provider_when_several_exist() {
+        let d = tmpdir("codex_multiple");
+        write(
+            &d,
+            "multi.config.toml",
+            "model_provider = \"chosen\"\n\n[model_providers.other]\n\
+             base_url = \"https://wrong.example/v1\"\nenv_key = \"WRONG\"\n\n\
+             [model_providers.chosen]\nbase_url = \"https://right.example/v1\"\n\
+             env_key = \"RIGHT\"\nwire_api = \"chat\"\n",
+        );
+
+        let found = scan_codex_dir(&d);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].base_url, "https://right.example/v1");
+        assert_eq!(found[0].env_var, "RIGHT");
+        assert_eq!(found[0].wire_api.as_deref(), Some("chat"));
+    }
+
     /// Each profile must carry its OWN env var. Assuming one shared name is
     /// what made a second profile load its key into the wrong variable
     /// (evidence #3).
@@ -413,5 +617,96 @@ wire_api = "responses"
         let missing = std::env::temp_dir().join("agentport_no_such_dir_xyz");
         assert!(scan_claude_dir(&missing).is_empty());
         assert!(scan_codex_dir(&missing).is_empty());
+    }
+
+    #[test]
+    fn reads_keys_from_generated_posix_assignments() {
+        let body = "AGENTPORT_HT_API_KEY='abc' command codex --profile ht \"$@\"\n";
+        assert_eq!(
+            find_key_assignment(body, "AGENTPORT_HT_API_KEY").as_deref(),
+            Some("abc")
+        );
+    }
+
+    #[test]
+    fn reads_escaped_quotes_from_generated_scripts() {
+        let body = "AGENTPORT_HT_API_KEY='a'\\''b' command codex --profile ht \"$@\"\n";
+        assert_eq!(
+            find_key_assignment(body, "AGENTPORT_HT_API_KEY").as_deref(),
+            Some("a'b")
+        );
+    }
+
+    #[test]
+    fn reads_keys_from_generated_powershell_assignments() {
+        let body = "$env:AGENTPORT_HT_API_KEY = 'a''b'\n";
+        assert_eq!(
+            find_key_assignment(body, "AGENTPORT_HT_API_KEY").as_deref(),
+            Some("a'b")
+        );
+    }
+
+    #[test]
+    fn machine_scan_recovers_a_codex_key_for_export() {
+        let d = tmpdir("machine_key");
+        let env_var = format!("AGENTPORT_SCAN_TEST_{}_KEY", std::process::id());
+        fs::create_dir_all(d.join(".codex")).unwrap();
+        write(
+            &d.join(".codex"),
+            "ht.config.toml",
+            &format!(
+                "model = \"gpt-5.5\"\nmodel_provider = \"p\"\n\n\
+                 [model_providers.p]\nbase_url = \"https://provider.example/v1\"\n\
+                 env_key = \"{env_var}\"\n"
+            ),
+        );
+        fs::create_dir_all(d.join(".agentport")).unwrap();
+        fs::write(
+            d.join(".agentport/profiles.sh"),
+            format!("{env_var}='key-from-mac' command codex --profile ht \"$@\"\n"),
+        )
+        .unwrap();
+
+        let found = scan_machine_at(&d);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].api_key, "key-from-mac");
+    }
+
+    #[test]
+    fn shell_aliases_are_kept_separate_from_cli_profile_names() {
+        let d = tmpdir("shell_aliases");
+        let env_var = format!("AGENTPORT_SHELL_ALIAS_{}_KEY", std::process::id());
+        fs::create_dir_all(d.join(".claude/profiles")).unwrap();
+        fs::create_dir_all(d.join(".codex")).unwrap();
+        fs::create_dir_all(d.join(".codex/keys")).unwrap();
+        write(
+            &d.join(".claude/profiles"),
+            "htmustc.json",
+            r#"{"env":{"ANTHROPIC_BASE_URL":"https://htmustc.id.vn"}}"#,
+        );
+        write(
+            &d.join(".codex"),
+            "ht.config.toml",
+            &format!(
+                "model = \"gpt-5.5\"\n\n[model_providers.p]\nbase_url = \"https://htmustc.id.vn/v1\"\nenv_key = \"{env_var}\"\n"
+            ),
+        );
+        write(&d.join(".codex/keys"), "ht", "key-from-profile-file\n");
+        write(
+            &d,
+            ".zshrc",
+            "alias cht='cp_claude htmustc'\nalias co-ht='cp_codex ht'\nalias c='claude'\n",
+        );
+
+        let found = scan_machine_at(&d);
+        assert_eq!(
+            found.iter().map(|p| p.alias.as_str()).collect::<Vec<_>>(),
+            ["cht", "co-ht"]
+        );
+        let codex = found.iter().find(|p| p.alias == "co-ht").unwrap();
+        assert_eq!(codex.profile_name.as_deref(), Some("ht"));
+        assert_eq!(codex.api_key, "key-from-profile-file");
+        let claude = found.iter().find(|p| p.alias == "cht").unwrap();
+        assert_eq!(claude.profile_name.as_deref(), Some("htmustc"));
     }
 }

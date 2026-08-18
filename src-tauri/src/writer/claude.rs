@@ -93,6 +93,7 @@ mod tests {
     fn profile(danger: DangerLevel) -> Profile {
         Profile {
             alias: "htmustc".into(),
+            profile_name: None,
             cli: CliKind::Claude,
             provider: "htmustc.id.vn".into(),
             base_url: "https://htmustc.id.vn".into(),
@@ -160,7 +161,10 @@ mod tests {
         });
         let out = render(&profile(DangerLevel::Bypass), Some(&existing));
 
-        assert_eq!(out["enabledPlugins"]["gopls-lsp@claude-plugins-official"], true);
+        assert_eq!(
+            out["enabledPlugins"]["gopls-lsp@claude-plugins-official"],
+            true
+        );
         assert_eq!(out["model"], "opus");
         assert_eq!(out["env"]["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"], "1");
     }

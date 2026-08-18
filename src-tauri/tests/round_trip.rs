@@ -6,7 +6,7 @@
 use agentport_lib::model::*;
 use agentport_lib::{bundle, scan, shell, writer};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn tmp(tag: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("agentport_it_{tag}_{}", std::process::id()));
@@ -16,7 +16,7 @@ fn tmp(tag: &str) -> PathBuf {
 }
 
 /// Builds a machine that looks like one configured by hand.
-fn seed_machine(home: &PathBuf) {
+fn seed_machine(home: &Path) {
     fs::create_dir_all(home.join(".claude/profiles")).unwrap();
     fs::write(
         home.join(".claude/profiles/htmustc.json"),
@@ -73,7 +73,9 @@ fn scan_export_import_install_round_trip() {
     // --- machine B: import onto an empty machine -------------------------
     let incoming: Bundle = serde_json::from_str(&json).unwrap();
     let plans = bundle::plan_import(&incoming, &[]);
-    assert!(plans.iter().all(|p| matches!(p, bundle::ImportPlan::Add { .. })));
+    assert!(plans
+        .iter()
+        .all(|p| matches!(p, bundle::ImportPlan::Add { .. })));
 
     let mut installed: Vec<Profile> = incoming.profiles.clone();
     for p in &mut installed {
@@ -117,7 +119,10 @@ fn scan_export_import_install_round_trip() {
     let script = fs::read_to_string(machine_b.join(".agentport/profiles.sh")).unwrap();
     assert!(script.contains("ANTHROPIC_AUTH_TOKEN="));
     assert!(script.contains("PROVIDER_HT_KEY="));
-    assert!(!script.contains("export "), "keys must not leak into the shell");
+    assert!(
+        !script.contains("export "),
+        "keys must not leak into the shell"
+    );
 
     // Machine B's tier-1 config was never created by us.
     assert!(!machine_b.join(".codex/config.toml").exists());
@@ -137,7 +142,9 @@ fn reimporting_the_same_bundle_changes_nothing() {
     let plans = bundle::plan_import(&again, &existing);
 
     assert!(
-        plans.iter().all(|p| matches!(p, bundle::ImportPlan::Skip { .. })),
+        plans
+            .iter()
+            .all(|p| matches!(p, bundle::ImportPlan::Skip { .. })),
         "identical profiles must be skipped, not duplicated"
     );
 }
@@ -148,13 +155,17 @@ fn installing_twice_is_idempotent() {
     let home = tmp("twice");
     let profiles = vec![Profile {
         alias: "cht".into(),
+        profile_name: None,
         cli: CliKind::Claude,
         provider: "provider.example".into(),
         base_url: "https://provider.example".into(),
         api_key: "k".into(),
         env_var: "ANTHROPIC_AUTH_TOKEN".into(),
         danger: DangerLevel::Bypass,
-        model_map: ModelMap::default(),
+        model_map: ModelMap {
+            opus: Some("claude-opus-5".into()),
+            ..ModelMap::default()
+        },
         wire_api: None,
         origin: Origin::Manual,
     }];

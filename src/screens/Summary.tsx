@@ -2,7 +2,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StatusBadge, probeTone } from "@/components/StatusBadge";
 import { CheckIcon, InfoIcon, Spinner } from "@/components/Icons";
-import type { CliKind, InstallReport, ProbeReport, Profile } from "@/types";
+import {
+  profileConfigurationIssue,
+  type CliKind,
+  type InstallReport,
+  type ProbeReport,
+  type Profile,
+} from "@/types";
 
 /** What the install actually did, plus a real probe per profile.
  *
@@ -23,8 +29,12 @@ export function Summary({
   busy: string | null;
   onBack: () => void;
 }) {
-  const done = profiles.filter((p) => installed[p.cli]);
-  const held = profiles.filter((p) => !installed[p.cli]);
+  const done = profiles.filter(
+    (p) => installed[p.cli] && !profileConfigurationIssue(p),
+  );
+  const held = profiles.filter(
+    (p) => !installed[p.cli] || profileConfigurationIssue(p),
+  );
 
   return (
     <div className="space-y-3">
@@ -78,8 +88,9 @@ export function Summary({
             <StatusBadge tone="waiting">not activated</StatusBadge>
           </div>
           <p className="text-muted-foreground text-xs leading-relaxed">
-            Kept, but the CLI is not on this machine. Install it and run agentport
-            again.
+            {!installed[p.cli]
+              ? "Kept, but the CLI is not on this machine. Install it and run agentport again."
+              : `Kept, but ${profileConfigurationIssue(p) ?? "it needs setup"}. Edit it before installing.`}
           </p>
         </Card>
       ))}

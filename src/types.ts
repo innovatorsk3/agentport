@@ -5,6 +5,7 @@
 /** Deliberately distinctive so it does not slip into a repo unnoticed —
  *  bundles carry API keys in plaintext by design. */
 export const BUNDLE_EXT = ".agentport";
+export const CLAUDE_AUTH_ENV = "ANTHROPIC_AUTH_TOKEN";
 
 export type CliKind = "claude" | "codex";
 
@@ -22,6 +23,8 @@ export interface ModelMap {
 
 export interface Profile {
   alias: string;
+  /** The CLI's named profile/config stem when it differs from the shell alias. */
+  profile_name?: string;
   cli: CliKind;
   provider: string;
   base_url: string;
@@ -57,6 +60,24 @@ export type ImportPlan =
   | { kind: "add"; alias: string }
   | { kind: "rename"; from: string; to: string };
 
+export function profileConfigurationIssue(profile: Profile): string | null {
+  if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(profile.alias)) {
+    return "invalid alias";
+  }
+  if (!profile.provider.trim()) return "provider is missing";
+  if (!/^https?:\/\/[^\s]+$/i.test(profile.base_url)) return "base URL is invalid";
+  if (!profile.api_key.trim()) return "API key is missing";
+  if (profile.cli === "claude" && profile.env_var !== CLAUDE_AUTH_ENV) {
+    return `${CLAUDE_AUTH_ENV} is required for Claude Code`;
+  }
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(profile.env_var)) {
+    return "environment variable name is invalid";
+  }
+
+  const model = profile.cli === "claude" ? profile.model_map.opus : profile.model_map.default;
+  return model?.trim() ? null : "model mapping is missing";
+}
+
 export type ProbeResult =
   | { outcome: "ok"; millis: number }
   | { outcome: "bad_key"; detail: string }
@@ -86,7 +107,7 @@ export const PRESETS: Record<CliKind, Partial<Profile>> = {
     cli: "claude",
     alias: "cc",
     // Claude Code reads the key from this fixed variable.
-    env_var: "ANTHROPIC_AUTH_TOKEN",
+    env_var: CLAUDE_AUTH_ENV,
     danger: "bypass",
     model_map: {},
   },

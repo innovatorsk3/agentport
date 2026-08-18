@@ -5,7 +5,7 @@
 //! never touched (§4).
 
 use crate::model::{DangerLevel, Profile};
-use toml_edit::{DocumentMut, Item, Table, value};
+use toml_edit::{value, DocumentMut, Item, Table};
 
 /// Provider table key, derived from the alias so two profiles never collide.
 pub fn provider_key(alias: &str) -> String {
@@ -48,7 +48,7 @@ pub fn render(profile: &Profile, existing: Option<&str>) -> Result<String, Strin
         None => DocumentMut::new(),
     };
 
-    let key = provider_key(&profile.alias);
+    let key = provider_key(profile.cli_profile_name());
     doc["model_provider"] = value(key.clone());
 
     if let Some(model) = &profile.model_map.default {
@@ -74,7 +74,12 @@ pub fn render(profile: &Profile, existing: Option<&str>) -> Result<String, Strin
     provider["name"] = value(profile.provider.clone());
     provider["base_url"] = value(profile.base_url.clone());
     provider["env_key"] = value(profile.env_var.clone());
-    provider["wire_api"] = value(profile.wire_api.clone().unwrap_or_else(|| "responses".into()));
+    provider["wire_api"] = value(
+        profile
+            .wire_api
+            .clone()
+            .unwrap_or_else(|| "responses".into()),
+    );
     providers[&key] = Item::Table(provider);
 
     Ok(doc.to_string())
@@ -98,6 +103,7 @@ mod tests {
     fn profile(alias: &str, danger: DangerLevel) -> Profile {
         Profile {
             alias: alias.into(),
+            profile_name: None,
             cli: CliKind::Codex,
             provider: "htmustc.id.vn".into(),
             base_url: "https://htmustc.id.vn/v1".into(),
@@ -179,8 +185,13 @@ trust_level = "trusted"
         let v = parse(&out);
 
         assert_eq!(v["model"].as_str(), Some("gpt-5.5")); // updated
-        assert!(v["hooks"]["state"].get("/Users/mac/.codex/hooks.json:session_start:0:0").is_some());
-        assert_eq!(v["projects"]["/Users/mac/code"]["trust_level"].as_str(), Some("trusted"));
+        assert!(v["hooks"]["state"]
+            .get("/Users/mac/.codex/hooks.json:session_start:0:0")
+            .is_some());
+        assert_eq!(
+            v["projects"]["/Users/mac/code"]["trust_level"].as_str(),
+            Some("trusted")
+        );
     }
 
     /// Each profile must carry its own variable — evidence #3.

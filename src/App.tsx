@@ -7,12 +7,12 @@ import { ProfileList } from "@/screens/ProfileList";
 import { StartScreen } from "@/screens/StartScreen";
 import { Summary } from "@/screens/Summary";
 import {
-  BUNDLE_EXT,
   type Bundle,
   type CliKind,
   type InstallReport,
   type ProbeReport,
   type Profile,
+  profileConfigurationIssue,
 } from "@/types";
 import "@/index.css";
 
@@ -31,6 +31,7 @@ const TITLES: Record<Screen, { title: string; sub?: string }> = {
 export default function App() {
   const [screen, setScreen] = useState<Screen>("start");
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [exportSelection, setExportSelection] = useState<Set<string>>(new Set());
   const [installed, setInstalled] = useState<Record<CliKind, boolean>>({
     claude: false,
     codex: false,
@@ -50,7 +51,13 @@ export default function App() {
   // could answer itself.
   useEffect(() => {
     void (async () => {
-      await refreshCliState();
+      try {
+        await refreshCliState();
+      } catch {
+        // A detection failure must not prevent scanning or leave the start
+        // screen spinning forever.
+        setInstalled({ claude: false, codex: false });
+      }
       try {
         setScanned(await api.scanMachine());
       } catch {
@@ -76,6 +83,8 @@ export default function App() {
 
   function adoptScanned() {
     setProfiles(scanned);
+    // Export is opt-in: scanning a machine must not silently select every key.
+    setExportSelection(new Set());
     setScreen("list");
     setNotice({
       tone: "good",
@@ -87,10 +96,18 @@ export default function App() {
     setBusy("Reading bundle…");
     setNotice(null);
     try {
-      const bundle: Bundle = JSON.parse(await file.text());
-      if (!Array.isArray(bundle.profiles)) {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!isBundle(parsed)) {
         throw new Error("that file is not an agentport bundle");
       }
+      const bundle: Bundle = {
+        ...parsed,
+        profiles: parsed.profiles.map((p) => ({
+          ...p,
+          model_map: p.model_map ?? {},
+          origin: p.origin ?? "imported",
+        })),
+      };
       // Compares identity, not name: identical entries are skipped so importing
       // the same bundle twice cannot pile up copies.
       const plans = await api.planImport(bundle, profiles);
@@ -121,20 +138,34 @@ export default function App() {
     }
   }
 
-  function doExport() {
-    const bundle: Bundle = { version: 1, profiles };
-    const blob = new Blob([JSON.stringify(bundle, null, 2)], {
-      type: "application/json",
-    });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `profiles${BUNDLE_EXT}`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    setNotice({
-      tone: "warn",
-      text: "Bundle saved. It carries your API keys in plaintext — do not commit it to a repository.",
-    });
+  async function doExport() {
+    const selected = profiles.filter((p) => exportSelection.has(p.alias));
+    if (!selected.length) {
+      setNotice({ tone: "bad", text: "Select at least one profile to export." });
+      return;
+    }
+    const incomplete = selected.find((p) => profileConfigurationIssue(p));
+    if (incomplete) {
+      setNotice({
+        tone: "bad",
+        text: `Cannot export ${incomplete.alias} yet: ${profileConfigurationIssue(incomplete)}.`,
+      });
+      return;
+    }
+    const bundle: Bundle = { version: 1, profiles: selected };
+    setBusy("Choose where to save the bundle…");
+    try {
+      if (await api.saveBundle(bundle)) {
+        setNotice({
+          tone: "warn",
+          text: "Bundle saved. It carries your API keys in plaintext — do not commit it to a repository.",
+        });
+      }
+    } catch (e) {
+      setNotice({ tone: "bad", text: String(e) });
+    } finally {
+      setBusy(null);
+    }
   }
 
   /** Probing one profile. Deliberately available before installing anything. */
@@ -158,7 +189,9 @@ export default function App() {
     try {
       // Only profiles whose CLI is present get installed; the rest stay in the
       // list, not ready, so they are never lost.
-      const ready = profiles.filter((p) => installed[p.cli]);
+      const ready = profiles.filter(
+        (p) => installed[p.cli] && !profileConfigurationIssue(p),
+      );
       const rep = await api.installProfiles(ready);
       setReport(rep);
       setScreen("summary");
@@ -186,12 +219,23 @@ export default function App() {
       }
       return [...prev, p];
     });
+    setExportSelection((prev) => {
+      const next = new Set(prev);
+      if (editing && editing !== p.alias && next.delete(editing)) {
+        // Preserve an explicit selection when the user renames a profile.
+        next.add(p.alias);
+      }
+      return next;
+    });
     setEditing(null);
     setAdding(false);
     if (screen === "start") setScreen("list");
   }
 
-  const installable = profiles.filter((p) => installed[p.cli]).length;
+  const installable = profiles.filter(
+    (p) => installed[p.cli] && !profileConfigurationIssue(p),
+  ).length;
+  const exportable = profiles.filter((p) => exportSelection.has(p.alias)).length;
   const showList = screen === "list" || (screen === "start" && adding);
 
   return (
@@ -227,7 +271,7 @@ export default function App() {
             {screen === "list" &&
               `${profiles.length} total${
                 profiles.length - installable > 0
-                  ? ` · ${profiles.length - installable} waiting on a CLI`
+                  ? ` · ${profiles.length - installable} not ready`
                   : ""
               }`}
             {screen === "summary" && report && `${report.configs.length} written`}
@@ -266,8 +310,22 @@ export default function App() {
               setEditing(null);
             }}
             onSave={saveProfile}
-            onRemove={(alias) =>
-              setProfiles((prev) => prev.filter((x) => x.alias !== alias))
+            onRemove={(alias) => {
+              setProfiles((prev) => prev.filter((x) => x.alias !== alias));
+              setExportSelection((prev) => {
+                const next = new Set(prev);
+                next.delete(alias);
+                return next;
+              });
+            }}
+            selectedForExport={exportSelection}
+            onToggleExport={(alias) =>
+              setExportSelection((prev) => {
+                const next = new Set(prev);
+                if (next.has(alias)) next.delete(alias);
+                else next.add(alias);
+                return next;
+              })
             }
             onTest={testOne}
             onRecheck={refreshCliState}
@@ -304,10 +362,10 @@ export default function App() {
               variant="secondary"
               size="sm"
               onClick={doExport}
-              disabled={!profiles.length}
+              disabled={!exportable || !!busy}
             >
               <ExportIcon className="size-4" />
-              Export bundle
+              Export {exportable} profile{exportable === 1 ? "" : "s"}
             </Button>
             <div className="flex-1" />
             <Button onClick={doInstall} disabled={!installable || !!busy}>
@@ -358,4 +416,27 @@ function NoticeBar({
       </button>
     </div>
   );
+}
+
+function isBundle(value: unknown): value is Bundle {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { version?: unknown; profiles?: unknown };
+  if (candidate.version !== 1 || !Array.isArray(candidate.profiles) || !candidate.profiles.length) {
+    return false;
+  }
+  return candidate.profiles.every((profile) => {
+    if (!profile || typeof profile !== "object") return false;
+    const p = profile as Record<string, unknown>;
+    return (
+      typeof p.alias === "string" &&
+      (p.cli === "claude" || p.cli === "codex") &&
+      typeof p.provider === "string" &&
+      typeof p.base_url === "string" &&
+      typeof p.api_key === "string" &&
+      typeof p.env_var === "string" &&
+      typeof p.danger === "string" &&
+      (p.model_map === undefined ||
+        (p.model_map !== null && typeof p.model_map === "object"))
+    );
+  });
 }

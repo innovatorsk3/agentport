@@ -51,9 +51,13 @@ pub fn script_path(home: &Path, shell: ShellKind) -> PathBuf {
 pub fn rc_line(home: &Path, shell: ShellKind) -> String {
     let p = script_path(home, shell);
     match shell {
-        ShellKind::Posix => format!("[ -f {0} ] && . {0}", p.display()),
+        ShellKind::Posix => {
+            let path = shell_quote(&p.display().to_string());
+            format!("[ -f {path} ] && . {path}")
+        }
         ShellKind::PowerShell => {
-            format!("if (Test-Path {0}) {{ . {0} }}", p.display())
+            let path = ps_quote(&p.display().to_string());
+            format!("if (Test-Path {path}) {{ . {path} }}")
         }
     }
 }
@@ -68,7 +72,7 @@ pub fn rc_already_registered(rc_text: &str) -> bool {
     rc_text
         .lines()
         .filter(|l| !l.trim_start().starts_with('#'))
-        .any(|l| l.contains(RC_MARKER))
+        .any(|l| l.replace('\\', "/").contains(RC_MARKER))
 }
 
 /// Adds the line to an rc file if — and only if — it is not already there.
@@ -127,7 +131,7 @@ fn render_posix(home: &Path, profiles: &[Profile]) -> String {
                 "{env}={key} command codex --profile {alias} \"$@\"",
                 env = p.env_var,
                 key = shell_quote(&p.api_key),
-                alias = shell_quote(&p.alias),
+                alias = shell_quote(p.cli_profile_name()),
             ),
         };
 
@@ -153,19 +157,16 @@ fn render_powershell(home: &Path, profiles: &[Profile]) -> String {
         // PowerShell aliases cannot take arguments at all, so a function is the
         // only option here — not merely the better one.
         let invoke = match p.cli {
-            CliKind::Claude => format!(
-                "  & claude --settings {cfg} @args",
-                cfg = ps_quote(&cfg)
-            ),
+            CliKind::Claude => format!("  & claude --settings {cfg} @args", cfg = ps_quote(&cfg)),
             CliKind::Codex => format!(
                 "  & codex --profile {alias} @args",
-                alias = ps_quote(&p.alias)
+                alias = ps_quote(p.cli_profile_name())
             ),
         };
 
         out.push_str(&format!(
             "# {alias} -> {provider}\nfunction {fname} {{\n  \
-             $env:{env} = {key}\n{invoke}\n}}\n\n",
+             $agentportPrevious = $env:{env}\n  $env:{env} = {key}\n  try {{\n{invoke}\n  }} finally {{\n    $env:{env} = $agentportPrevious\n  }}\n}}\n\n",
             alias = p.alias,
             provider = p.provider,
             fname = p.alias,
@@ -216,7 +217,9 @@ pub fn validate_alias(alias: &str) -> Result<(), String> {
         .filter(|c| !(c.is_ascii_alphanumeric() || *c == '_' || *c == '-'))
         .collect();
     if !bad.is_empty() {
-        return Err(format!("alias cannot contain {bad:?} — it is typed at a shell prompt"));
+        return Err(format!(
+            "alias cannot contain {bad:?} — it is typed at a shell prompt"
+        ));
     }
     Ok(())
 }
@@ -265,6 +268,7 @@ mod tests {
     fn profile(alias: &str, cli: CliKind) -> Profile {
         Profile {
             alias: alias.into(),
+            profile_name: None,
             cli,
             provider: "htmustc.id.vn".into(),
             base_url: "https://htmustc.id.vn/v1".into(),
@@ -331,6 +335,12 @@ mod tests {
         assert!(rc_already_registered(rc));
     }
 
+    #[test]
+    fn detects_a_windows_source_line_with_backslashes() {
+        let rc = r#"if (Test-Path 'C:\Users\dev\.agentport\profiles.ps1') { . 'C:\Users\dev\.agentport\profiles.ps1' }"#;
+        assert!(rc_already_registered(rc));
+    }
+
     /// A commented-out line is not active, so it must NOT count as registered.
     #[test]
     fn a_commented_out_line_does_not_count() {
@@ -387,12 +397,17 @@ mod tests {
     #[test]
     fn powershell_uses_functions_not_aliases() {
         let home = tmpdir("ps_fn");
-        let script =
-            render_script(&home, &[profile("cht", CliKind::Claude)], ShellKind::PowerShell);
+        let script = render_script(
+            &home,
+            &[profile("cht", CliKind::Claude)],
+            ShellKind::PowerShell,
+        );
 
         assert!(script.contains("function cht {"));
         assert!(script.contains("@args"));
         assert!(!script.contains("Set-Alias"));
+        assert!(script.contains("$agentportPrevious = $env:"));
+        assert!(script.contains("finally"));
     }
 
     /// The key must be scoped to the command, never exported — an exported key
@@ -421,6 +436,18 @@ mod tests {
         assert!(script.contains("VAR_B="));
     }
 
+    #[test]
+    fn generated_alias_calls_the_underlying_cli_profile() {
+        let home = tmpdir("named_profile");
+        let mut p = profile("co-ht", CliKind::Codex);
+        p.profile_name = Some("ht".into());
+
+        let script = render_script(&home, &[p], ShellKind::Posix);
+        assert!(script.contains("co-ht() {"));
+        assert!(script.contains("codex --profile 'ht'"));
+        assert!(!script.contains("codex --profile 'co-ht'"));
+    }
+
     /// A quote inside a key must not break out of the string and execute.
     #[test]
     fn a_quote_in_a_key_cannot_escape_the_string() {
@@ -446,7 +473,8 @@ mod tests {
     #[test]
     fn writes_the_script_and_creates_its_directory() {
         let home = tmpdir("write");
-        let path = write_script(&home, &[profile("cht", CliKind::Claude)], ShellKind::Posix).unwrap();
+        let path =
+            write_script(&home, &[profile("cht", CliKind::Claude)], ShellKind::Posix).unwrap();
 
         assert!(path.exists());
         assert!(path.ends_with(".agentport/profiles.sh"));

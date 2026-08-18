@@ -16,14 +16,13 @@ use std::path::{Path, PathBuf};
 
 /// Where a profile's config file belongs, relative to the user's home.
 pub fn config_path(home: &Path, profile: &Profile) -> PathBuf {
+    let name = profile.cli_profile_name();
     match profile.cli {
         CliKind::Claude => home
             .join(".claude")
             .join("profiles")
-            .join(format!("{}.json", profile.alias)),
-        CliKind::Codex => home
-            .join(".codex")
-            .join(format!("{}.config.toml", profile.alias)),
+            .join(format!("{name}.json")),
+        CliKind::Codex => home.join(".codex").join(format!("{name}.config.toml")),
     }
 }
 
@@ -41,9 +40,13 @@ pub fn write_profile(home: &Path, profile: &Profile) -> Result<PathBuf, String> 
 
     let rendered = match profile.cli {
         CliKind::Claude => {
-            let parsed = existing
-                .as_deref()
-                .and_then(|t| serde_json::from_str::<serde_json::Value>(t).ok());
+            let parsed = match existing.as_deref() {
+                Some(text) => Some(
+                    serde_json::from_str::<serde_json::Value>(text)
+                        .map_err(|e| format!("existing config is not valid JSON: {e}"))?,
+                ),
+                None => None,
+            };
             let doc = claude::render(profile, parsed.as_ref());
             serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n"
         }
@@ -69,6 +72,7 @@ mod tests {
     fn profile(alias: &str, cli: CliKind) -> Profile {
         Profile {
             alias: alias.into(),
+            profile_name: None,
             cli,
             provider: "htmustc.id.vn".into(),
             base_url: "https://htmustc.id.vn/v1".into(),
@@ -170,5 +174,17 @@ mod tests {
 
         let path = write_profile(&home, &profile("new", CliKind::Claude)).unwrap();
         assert!(path.exists());
+    }
+
+    #[test]
+    fn refuses_to_overwrite_a_malformed_claude_config() {
+        let home = tmpdir("claude_bad");
+        let path = home.join(".claude/profiles/bad.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "{ not json").unwrap();
+
+        let err = write_profile(&home, &profile("bad", CliKind::Claude)).unwrap_err();
+        assert!(err.contains("not valid JSON"));
+        assert_eq!(fs::read_to_string(path).unwrap(), "{ not json");
     }
 }

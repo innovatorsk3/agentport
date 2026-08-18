@@ -2,6 +2,8 @@
 // Every filesystem and network operation lives in Rust; this file only calls it.
 
 import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import { BUNDLE_EXT } from "./types";
 import type {
   Bundle,
   CliKind,
@@ -35,6 +37,20 @@ export const suggestModelMapping = (cli: CliKind, available: ModelInfo[]) =>
 export const planImport = (incoming: Bundle, existing: Profile[]) =>
   invoke<ImportPlan[]>("plan_import", { incoming, existing });
 
+export async function saveBundle(bundle: Bundle): Promise<boolean> {
+  const selected = await save({
+    defaultPath: `profiles${BUNDLE_EXT}`,
+    filters: [{ name: "agentport bundle", extensions: ["agentport"] }],
+  });
+  if (!selected) return false;
+
+  const path = selected.toLowerCase().endsWith(BUNDLE_EXT)
+    ? selected
+    : `${selected}${BUNDLE_EXT}`;
+  await invoke("write_bundle", { path, bundle });
+  return true;
+}
+
 export const installProfiles = (profiles: Profile[]) =>
   invoke<InstallReport>("install_profiles", { profiles });
 
@@ -56,7 +72,14 @@ export async function fetchModels(
 ): Promise<ModelInfo[]> {
   const root = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
   const res = await fetch(`${root}/v1/models`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(30_000),
+    headers: {
+      // OpenAI-compatible gateways use bearer auth; Claude-compatible
+      // gateways commonly require x-api-key instead.
+      Authorization: `Bearer ${apiKey}`,
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
   });
   if (!res.ok) {
     throw new Error(`provider returned ${res.status} for the model list`);

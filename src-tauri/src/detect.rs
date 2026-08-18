@@ -97,9 +97,12 @@ fn fallback_dirs(home: &Path) -> Vec<PathBuf> {
 }
 
 fn home() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+    #[cfg(windows)]
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
+    #[cfg(not(windows))]
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+
+    home.map(PathBuf::from)
 }
 
 /// True when `dir` holds a runnable file called `name`.

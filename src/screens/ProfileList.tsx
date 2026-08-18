@@ -8,7 +8,7 @@ import {
   TrashIcon,
 } from "@/components/Icons";
 import { ProfileForm } from "./ProfileForm";
-import type { CliKind, ProbeReport, Profile } from "@/types";
+import { profileConfigurationIssue, type CliKind, type ProbeReport, type Profile } from "@/types";
 
 const CLI_NAME: Record<CliKind, string> = {
   claude: "Claude Code",
@@ -30,6 +30,8 @@ interface Props {
   onRemove: (alias: string) => void;
   onTest: (p: Profile) => void;
   onRecheck: () => void;
+  selectedForExport: Set<string>;
+  onToggleExport: (alias: string) => void;
 }
 
 export function ProfileList({
@@ -46,13 +48,19 @@ export function ProfileList({
   onRemove,
   onTest,
   onRecheck,
+  selectedForExport,
+  onToggleExport,
 }: Props) {
   const missing = profiles.filter((p) => !installed[p.cli]);
+  const incomplete = profiles.filter(
+    (p) => installed[p.cli] && profileConfigurationIssue(p),
+  );
 
   return (
     <div className="space-y-3">
       {profiles.map((p) => {
-        const ready = installed[p.cli];
+        const configIssue = profileConfigurationIssue(p);
+        const ready = installed[p.cli] && !configIssue;
         const probe = probes[p.alias];
         const busy = testing.has(p.alias);
         const isEditing = editing === p.alias;
@@ -69,20 +77,34 @@ export function ProfileList({
                   ready ? "" : "opacity-60"
                 }`}
               >
-                <code className="text-sm font-medium">{p.alias}</code>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedForExport.has(p.alias)}
+                    onChange={() => onToggleExport(p.alias)}
+                    aria-label={`Include ${p.alias} in export`}
+                    className="accent-primary size-3.5"
+                  />
+                  <code className="text-sm font-medium">{p.alias}</code>
+                </label>
 
                 <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
                   {CLI_NAME[p.cli]} · {p.provider}
+                  {p.profile_name && p.profile_name !== p.alias
+                    ? ` · profile ${p.profile_name}`
+                    : ""}
                 </span>
 
                 {busy ? (
                   <StatusBadge tone="busy">testing</StatusBadge>
                 ) : ready ? (
                   <StatusBadge tone="ready">ready</StatusBadge>
-                ) : (
+                ) : !installed[p.cli] ? (
                   <StatusBadge tone="waiting">
                     {CLI_NAME[p.cli]} not found
                   </StatusBadge>
+                ) : (
+                  <StatusBadge tone="waiting">needs setup</StatusBadge>
                 )}
 
                 <div className="flex items-center gap-0.5">
@@ -148,6 +170,14 @@ export function ProfileList({
           <Button variant="secondary" size="sm" className="h-7" onClick={onRecheck}>
             check again
           </Button>
+        </div>
+      )}
+
+      {incomplete.length > 0 && (
+        <div className="border-(--color-warn)/25 bg-(--color-warn)/6 text-muted-foreground rounded-lg border p-3 text-xs leading-relaxed">
+          {incomplete.length} profile{incomplete.length === 1 ? " needs" : "s need"} setup
+          (API key or model mapping) before it can be installed. Edit the highlighted
+          profile and try again.
         </div>
       )}
 

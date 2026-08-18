@@ -16,12 +16,16 @@ use model::{Bundle, CliKind, ModelMap, Profile, ProfileState};
 use models::{ModelInfo, ModelIssue};
 use probe::ProbeResult;
 use serde::Serialize;
+use std::fs;
 use std::path::PathBuf;
 
 fn home_dir() -> Result<PathBuf, String> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+    #[cfg(windows)]
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
+    #[cfg(not(windows))]
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+
+    home.map(PathBuf::from)
         .ok_or_else(|| "cannot determine the home directory".to_string())
 }
 
@@ -88,8 +92,26 @@ fn suggest_model_mapping(cli: CliKind, available: Vec<ModelInfo>) -> ModelMap {
 // ---- bundles -------------------------------------------------------------
 
 #[tauri::command]
-fn plan_import(incoming: Bundle, existing: Vec<Profile>) -> Vec<ImportPlan> {
-    bundle::plan_import(&incoming, &existing)
+fn plan_import(incoming: Bundle, existing: Vec<Profile>) -> Result<Vec<ImportPlan>, String> {
+    bundle::validate_bundle(&incoming)?;
+    Ok(bundle::plan_import(&incoming, &existing))
+}
+
+#[tauri::command]
+fn write_bundle(path: String, bundle: Bundle) -> Result<(), String> {
+    bundle::validate_bundle(&bundle)?;
+    let path = PathBuf::from(path);
+    if !path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("agentport"))
+    {
+        return Err("bundle filename must end with .agentport".into());
+    }
+    let text = serde_json::to_string_pretty(&bundle)
+        .map_err(|e| format!("cannot serialize bundle: {e}"))?;
+    fs::write(&path, format!("{text}\n"))
+        .map_err(|e| format!("cannot write {}: {e}", path.display()))
 }
 
 // ---- install -------------------------------------------------------------
@@ -113,6 +135,12 @@ fn install_profiles(profiles: Vec<Profile>) -> Result<InstallReport, String> {
     // worse than a refused one.
     for p in &profiles {
         shell::validate_alias(&p.alias)?;
+        if let Some(name) = &p.profile_name {
+            shell::validate_alias(name).map_err(|e| {
+                format!("profile '{}' has an invalid CLI profile name: {e}", p.alias)
+            })?;
+        }
+        validate_profile(p)?;
     }
     shell::check_unique_aliases(&profiles)?;
 
@@ -134,6 +162,58 @@ fn install_profiles(profiles: Vec<Profile>) -> Result<InstallReport, String> {
         rc_file: rc.display().to_string(),
         rc_line_added: outcome == shell::RcOutcome::Added,
     })
+}
+
+/// Reject incomplete profiles before touching any file. An empty Codex key or
+/// model otherwise produces a plausible-looking install that can never work.
+fn validate_profile(profile: &Profile) -> Result<(), String> {
+    if profile.provider.trim().is_empty() {
+        return Err(format!("profile '{}' has no provider", profile.alias));
+    }
+    if profile.base_url.trim().is_empty()
+        || !(profile.base_url.starts_with("http://") || profile.base_url.starts_with("https://"))
+        || profile.base_url.chars().any(char::is_whitespace)
+    {
+        return Err(format!(
+            "profile '{}' has an invalid base URL",
+            profile.alias
+        ));
+    }
+    if profile.api_key.trim().is_empty() {
+        return Err(format!("profile '{}' has no API key", profile.alias));
+    }
+    if !valid_env_var(&profile.env_var) {
+        return Err(format!(
+            "profile '{}' has an invalid environment variable name",
+            profile.alias
+        ));
+    }
+    if matches!(profile.cli, CliKind::Claude) && profile.env_var != "ANTHROPIC_AUTH_TOKEN" {
+        return Err(format!(
+            "profile '{}' must use ANTHROPIC_AUTH_TOKEN for Claude Code",
+            profile.alias
+        ));
+    }
+
+    let model = match profile.cli {
+        CliKind::Claude => profile.model_map.opus.as_deref(),
+        CliKind::Codex => profile.model_map.default.as_deref(),
+    };
+    if model.is_none_or(|value| value.trim().is_empty()) {
+        let role = if matches!(profile.cli, CliKind::Claude) {
+            "opus"
+        } else {
+            "default"
+        };
+        return Err(format!("profile '{}' has no {role} model", profile.alias));
+    }
+    Ok(())
+}
+
+fn valid_env_var(name: &str) -> bool {
+    let mut chars = name.chars();
+    matches!(chars.next(), Some(c) if c == '_' || c.is_ascii_alphabetic())
+        && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
 }
 
 /// Returns true when the alias shadows a common command; errors when it cannot
@@ -169,6 +249,7 @@ async fn probe_profile(profile: Profile) -> ProbeReport {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             cli_state,
             scan_machine,
@@ -176,6 +257,7 @@ pub fn run() {
             validate_model_mapping,
             suggest_model_mapping,
             plan_import,
+            write_bundle,
             install_profiles,
             validate_alias,
             probe_profile

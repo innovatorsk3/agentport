@@ -1,6 +1,6 @@
 [package]
 name = "agentport"
-version = "0.1.0"
+version = "0.1.1"
 description = "Mang cau hinh Claude Code va Codex CLI sang may khac"
 authors = ["MinhDuc"]
 edition = "2021"

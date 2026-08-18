@@ -81,48 +81,76 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - uses: tauri-apps/tauri-action@v1
-        id: tauri
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Tauri bundle
+        run: pnpm tauri build --target ${{ matrix.target }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "agentport ${{ github.ref_name }}"
-          releaseBody: |
-            Download the build for your machine below, or fetch it directly.
+          name: agentport-${{ matrix.label }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+            src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
 
-            **Windows**
-            ```powershell
-            curl.exe -L -o agentport-setup.exe https://github.com/${{ github.repository }}/releases/latest/download/agentport-windows-x64.exe
-            ```
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
-            **macOS (Apple Silicon)**
-            ```bash
-            curl -L -o agentport.dmg https://github.com/${{ github.repository }}/releases/latest/download/agentport-macos-arm64.dmg
-            ```
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: agentport-*
+          path: artifacts
+          merge-multiple: true
 
-            **macOS (Intel)**
-            ```bash
-            curl -L -o agentport.dmg https://github.com/${{ github.repository }}/releases/latest/download/agentport-macos-intel.dmg
-            ```
+      - name: Publish stable release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
 
-            **Linux**
-            ```bash
-            curl -L -o agentport.AppImage https://github.com/${{ github.repository }}/releases/latest/download/agentport-linux-x64.AppImage
-            chmod +x agentport.AppImage && ./agentport.AppImage
-            ```
+          mkdir -p release-assets
 
-            ---
+          windows=$(find artifacts -type f -name '*-setup.exe' -print -quit)
+          arm_dmg=$(find artifacts -type f -name '*.dmg' \( -name '*aarch64*' -o -name '*arm64*' \) -print -quit)
+          intel_dmg=$(find artifacts -type f -name '*.dmg' \( -name '*x64*' -o -name '*x86_64*' \) -print -quit)
+          linux_appimage=$(find artifacts -type f -name '*.AppImage' -print -quit)
+          linux_deb=$(find artifacts -type f -name '*.deb' -print -quit)
 
-            Neither build is code-signed.
+          test -n "$windows"
+          test -n "$arm_dmg"
+          test -n "$intel_dmg"
+          test -n "$linux_appimage"
+          test -n "$linux_deb"
 
-            **Windows** — SmartScreen will warn on first run: *More info → Run anyway*.
-            **macOS** — right-click the app → Open, or System Settings → Privacy & Security → *Open Anyway*.
-          releaseDraft: false
-          prerelease: false
-          args: --target ${{ matrix.target }}
-          # Stable, platform-labelled filenames are what make
-          # `releases/latest/download/<name>` resolvable. The action's own
-          # default embeds the version, which moves every release.
-          releaseAssetNamePattern: "agentport-${{ matrix.label }}[ext]"
+          cp "$windows" release-assets/agentport-windows-x64.exe
+          cp "$arm_dmg" release-assets/agentport-macos-arm64.dmg
+          cp "$intel_dmg" release-assets/agentport-macos-intel.dmg
+          cp "$linux_appimage" release-assets/agentport-linux-x64.AppImage
+          cp "$linux_deb" release-assets/agentport-linux-x64.deb
 
+          notes=$(cat <<'EOF'
+          Download the build for your machine below, or fetch it directly.
+
+          Windows:
+          curl.exe --fail --location --show-error -o agentport-setup.exe https://github.com/REPO/releases/latest/download/agentport-windows-x64.exe
+
+          Builds are not code-signed. Windows SmartScreen and macOS Gatekeeper may ask for confirmation on first launch.
+          EOF
+          )
+          notes=${notes//REPO/$REPO}
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --repo "$REPO" --clobber
+          else
+            gh release create "$TAG" release-assets/* --repo "$REPO" \
+              --title "agentport $TAG" --notes "$notes"
+          fi

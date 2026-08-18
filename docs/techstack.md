@@ -121,9 +121,10 @@ Uses `tauri-apps/tauri-action@v1`, triggered by pushing a `v*` tag.
 
 ### Stable download URLs
 
-`tauri-action` names artifacts after the app version — `agentport_0.1.0_x64-setup.exe`
-— so the filename moves with every release and cannot be fetched blind. A second
-upload step copies each artifact to a fixed, platform-labelled name:
+Tauri's bundle names include the app version — for example
+`agentport_0.1.0_x64-setup.exe` — so the filename moves with every release and
+cannot be fetched blind. The publish job copies each artifact to a fixed,
+platform-labelled name:
 
 ```
 agentport-windows-x64-setup.exe
@@ -138,7 +139,8 @@ can `curl` a build without opening a browser.
 
 The release is **published, not drafted**. A draft is invisible to
 `latest/download` and to anyone but the repository owner — which would defeat the
-purpose.
+purpose. The build matrix uploads artifacts first; one publish job creates the
+release, avoiding concurrent release-creation races.
 
 ### Signing — v1 is unsigned
 

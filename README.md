@@ -48,7 +48,7 @@ Every release publishes builds under **stable filenames**, so a fresh machine ca
 <td>
 
 ```powershell
-curl.exe -L -o agentport-setup.exe https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-windows-x64.exe
+curl.exe --fail --location --show-error -o agentport-setup.exe https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-windows-x64.exe
 .\agentport-setup.exe
 ```
 
@@ -59,7 +59,7 @@ curl.exe -L -o agentport-setup.exe https://github.com/innovatorsk3/agentport/rel
 <td>
 
 ```bash
-curl -L -o agentport.dmg https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-macos-arm64.dmg
+curl --fail --location --show-error -o agentport.dmg https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-macos-arm64.dmg
 open agentport.dmg
 ```
 
@@ -70,7 +70,7 @@ open agentport.dmg
 <td>
 
 ```bash
-curl -L -o agentport.AppImage https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-linux-x64.AppImage
+curl --fail --location --show-error -o agentport.AppImage https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-linux-x64.AppImage
 chmod +x agentport.AppImage && ./agentport.AppImage
 ```
 

@@ -119,19 +119,40 @@ export function Summary({
         <span className="text-muted-foreground">
           {report.rc_line_added ? (
             <>
-              Added one line to <code className="text-foreground">{report.rc_file}</code>.{" "}
+              Added agentport to{" "}
+              {report.rc_files.length === 1 ? (
+                <code className="text-foreground">{report.rc_files[0]}</code>
+              ) : (
+                <>
+                  the PowerShell profiles{" "}
+                  <code className="text-foreground">
+                    {report.rc_files.join(", ")}
+                  </code>
+                </>
+              )}.{" "}
               <strong className="text-foreground font-medium">
                 Open a new terminal
               </strong>
-              , or run{" "}
-              <code className="text-foreground">source {report.rc_file}</code> in
-              the one you have.
+              {" "}to load the aliases.
             </>
           ) : (
             <>
-              <code className="text-foreground">{report.rc_file}</code> already
-              sourced agentport, so it was left untouched. Your aliases are live in
-              any new terminal.
+              {report.rc_files.length === 1 ? (
+                <>
+                  The configured profile{" "}
+                  <code className="text-foreground">{report.rc_files[0]}</code>{" "}
+                  already contains agentport, so it was left untouched.
+                </>
+              ) : (
+                <>
+                  The configured PowerShell profiles{" "}
+                  <code className="text-foreground">
+                    {report.rc_files.join(", ")}
+                  </code>{" "}
+                  already contain agentport, so they were left untouched.
+                </>
+              )}{" "}
+              Your aliases are live in any new terminal.
             </>
           )}
         </span>

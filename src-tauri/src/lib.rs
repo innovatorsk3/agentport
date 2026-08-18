@@ -17,7 +17,8 @@ use models::{ModelInfo, ModelIssue};
 use probe::ProbeResult;
 use serde::Serialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 fn home_dir() -> Result<PathBuf, String> {
     #[cfg(windows)]
@@ -38,18 +39,54 @@ fn host_shell() -> shell::ShellKind {
     }
 }
 
-/// Startup file for the host shell.
-fn rc_path() -> Result<PathBuf, String> {
+/// Startup files for the host shell.
+fn rc_paths() -> Result<Vec<PathBuf>, String> {
     let home = home_dir()?;
     Ok(if cfg!(windows) {
-        home.join("Documents")
-            .join("PowerShell")
-            .join("Microsoft.PowerShell_profile.ps1")
+        powershell_profile_paths(&home)
     } else if std::env::var("SHELL").unwrap_or_default().contains("bash") {
-        home.join(".bashrc")
+        vec![home.join(".bashrc")]
     } else {
-        home.join(".zshrc")
+        vec![home.join(".zshrc")]
     })
+}
+
+/// Resolve every profile path that an installed PowerShell may load. Windows
+/// PowerShell 5 and PowerShell 7 use different profile directories, and
+/// Documents may be redirected to OneDrive or another known-folder location.
+/// Asking each executable for `$PROFILE` handles both cases without guessing.
+fn powershell_profile_paths(home: &Path) -> Vec<PathBuf> {
+    let fallback = home
+        .join("Documents")
+        .join("PowerShell")
+        .join("Microsoft.PowerShell_profile.ps1");
+    let mut paths = Vec::new();
+
+    for executable in ["pwsh.exe", "powershell.exe"] {
+        let Ok(output) = Command::new(executable)
+            .args(["-NoProfile", "-NonInteractive", "-Command", "$PROFILE"])
+            .output()
+        else {
+            continue;
+        };
+        if !output.status.success() {
+            continue;
+        }
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !path.to_ascii_lowercase().ends_with(".ps1") {
+            continue;
+        }
+
+        let path = PathBuf::from(path);
+        if !paths.iter().any(|existing| existing == &path) {
+            paths.push(path);
+        }
+    }
+
+    if paths.is_empty() {
+        paths.push(fallback);
+    }
+    paths
 }
 
 // ---- detection & scanning ------------------------------------------------
@@ -121,14 +158,14 @@ fn write_bundle(path: String, bundle: Bundle) -> Result<(), String> {
 pub struct InstallReport {
     pub configs: Vec<String>,
     pub script: String,
-    pub rc_file: String,
+    pub rc_files: Vec<String>,
     /// True when the rc line was added just now — the only case where the user
     /// must open a new terminal.
     pub rc_line_added: bool,
 }
 
-/// Writes every profile's config, regenerates the script, and registers the
-/// single rc line if it is not already there.
+/// Writes every profile's config, regenerates the script, and registers one
+/// startup line in each supported shell profile if it is not already there.
 #[tauri::command]
 fn install_profiles(profiles: Vec<Profile>) -> Result<InstallReport, String> {
     // Validate every alias before writing anything — a half-installed set is
@@ -153,14 +190,21 @@ fn install_profiles(profiles: Vec<Profile>) -> Result<InstallReport, String> {
     }
 
     let script = shell::write_script(&home, &profiles, sh)?;
-    let rc = rc_path()?;
-    let outcome = shell::ensure_rc_line(&rc, &home, sh)?;
+    let rc_paths = rc_paths()?;
+    let mut rc_line_added = false;
+    for rc in &rc_paths {
+        let outcome = shell::ensure_rc_line(rc, &home, sh)?;
+        rc_line_added |= outcome == shell::RcOutcome::Added;
+    }
 
     Ok(InstallReport {
         configs,
         script: script.display().to_string(),
-        rc_file: rc.display().to_string(),
-        rc_line_added: outcome == shell::RcOutcome::Added,
+        rc_files: rc_paths
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect(),
+        rc_line_added,
     })
 }
 

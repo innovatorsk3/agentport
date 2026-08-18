@@ -96,7 +96,7 @@ export interface ProbeReport {
 export interface InstallReport {
   configs: string[];
   script: string;
-  rc_file: string;
+  rc_files: string[];
   /** Only when true does the user need to open a new terminal. */
   rc_line_added: boolean;
 }

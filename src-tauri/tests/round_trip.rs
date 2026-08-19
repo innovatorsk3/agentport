@@ -3,13 +3,13 @@
 //! Exercises the same functions the UI calls, so a regression here breaks the
 //! product flow rather than just a unit.
 
-use agentport_lib::model::*;
-use agentport_lib::{bundle, scan, shell, writer};
+use innovport_lib::model::*;
+use innovport_lib::{bundle, scan, shell, writer};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 fn tmp(tag: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("agentport_it_{tag}_{}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("innovport_it_{tag}_{}", std::process::id()));
     let _ = fs::remove_dir_all(&d);
     fs::create_dir_all(&d).unwrap();
     d
@@ -116,7 +116,7 @@ fn scan_export_import_install_round_trip() {
 
     // Each profile kept its own env var — sharing one sends a key to the wrong
     // provider.
-    let script = fs::read_to_string(machine_b.join(".agentport/profiles.sh")).unwrap();
+    let script = fs::read_to_string(machine_b.join(".innovport/profiles.sh")).unwrap();
     assert!(script.contains("ANTHROPIC_AUTH_TOKEN="));
     assert!(script.contains("PROVIDER_HT_KEY="));
     assert!(
@@ -185,10 +185,10 @@ fn installing_twice_is_idempotent() {
     let active = rc_text
         .lines()
         .filter(|l| !l.trim_start().starts_with('#'))
-        .filter(|l| l.contains("agentport/profiles"))
+        .filter(|l| l.contains("innovport/profiles"))
         .count();
     assert_eq!(active, 1);
 
-    let script = fs::read_to_string(home.join(".agentport/profiles.sh")).unwrap();
+    let script = fs::read_to_string(home.join(".innovport/profiles.sh")).unwrap();
     assert_eq!(script.matches("cht() {").count(), 1);
 }

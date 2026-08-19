@@ -184,7 +184,7 @@ mod tests {
     use std::fs;
 
     fn tmpdir(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("agentport_detect_{tag}_{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("innovport_detect_{tag}_{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn missing_directory_is_not_a_panic() {
-        let missing = std::env::temp_dir().join("agentport_no_such_dir_xyz");
+        let missing = std::env::temp_dir().join("innovport_no_such_dir_xyz");
         assert!(!executable_in(&missing, "claude"));
     }
 

@@ -84,7 +84,7 @@
 }
 
 .dark {
-    /* agentport palette — committed dark, cool-shifted rather than neutral grey.
+    /* InnovPort palette — committed dark, cool-shifted rather than neutral grey.
        An unsigned installer has to look like a product on sight; appearance is
        the only signature it has. */
     --background: oklch(0.178 0.012 265);

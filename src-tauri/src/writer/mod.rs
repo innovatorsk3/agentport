@@ -63,7 +63,7 @@ mod tests {
     use crate::model::{DangerLevel, ModelMap, Origin};
 
     fn tmpdir(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("agentport_writer_{tag}_{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("innovport_writer_{tag}_{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
@@ -77,7 +77,7 @@ mod tests {
             provider: "htmustc.id.vn".into(),
             base_url: "https://htmustc.id.vn/v1".into(),
             api_key: "mk-live-secret".into(),
-            env_var: "AGENTPORT_TEST_API_KEY".into(),
+            env_var: "INNOVPORT_TEST_API_KEY".into(),
             danger: DangerLevel::Bypass,
             model_map: ModelMap {
                 default: Some("gpt-5.5".into()),

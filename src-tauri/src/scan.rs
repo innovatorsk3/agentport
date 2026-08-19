@@ -321,6 +321,10 @@ fn parse_shell_aliases(text: &str) -> Vec<ShellAlias> {
 /// assignments so a scanned Codex profile can actually be exported.
 fn find_key_in_shell_files(home: &Path, env_var: &str) -> Option<String> {
     let candidates = [
+        home.join(".innovport/profiles.sh"),
+        home.join(".innovport/profiles.ps1"),
+        // Read the pre-rename directory so existing installs remain
+        // exportable after upgrading to InnovPort.
         home.join(".agentport/profiles.sh"),
         home.join(".agentport/profiles.ps1"),
         home.join(".zshrc"),
@@ -416,7 +420,7 @@ mod tests {
     use std::io::Write;
 
     fn tmpdir(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("agentport_scan_{tag}_{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("innovport_scan_{tag}_{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
@@ -614,34 +618,34 @@ wire_api = "responses"
 
     #[test]
     fn missing_directory_yields_nothing() {
-        let missing = std::env::temp_dir().join("agentport_no_such_dir_xyz");
+        let missing = std::env::temp_dir().join("innovport_no_such_dir_xyz");
         assert!(scan_claude_dir(&missing).is_empty());
         assert!(scan_codex_dir(&missing).is_empty());
     }
 
     #[test]
     fn reads_keys_from_generated_posix_assignments() {
-        let body = "AGENTPORT_HT_API_KEY='abc' command codex --profile ht \"$@\"\n";
+        let body = "INNOVPORT_HT_API_KEY='abc' command codex --profile ht \"$@\"\n";
         assert_eq!(
-            find_key_assignment(body, "AGENTPORT_HT_API_KEY").as_deref(),
+            find_key_assignment(body, "INNOVPORT_HT_API_KEY").as_deref(),
             Some("abc")
         );
     }
 
     #[test]
     fn reads_escaped_quotes_from_generated_scripts() {
-        let body = "AGENTPORT_HT_API_KEY='a'\\''b' command codex --profile ht \"$@\"\n";
+        let body = "INNOVPORT_HT_API_KEY='a'\\''b' command codex --profile ht \"$@\"\n";
         assert_eq!(
-            find_key_assignment(body, "AGENTPORT_HT_API_KEY").as_deref(),
+            find_key_assignment(body, "INNOVPORT_HT_API_KEY").as_deref(),
             Some("a'b")
         );
     }
 
     #[test]
     fn reads_keys_from_generated_powershell_assignments() {
-        let body = "$env:AGENTPORT_HT_API_KEY = 'a''b'\n";
+        let body = "$env:INNOVPORT_HT_API_KEY = 'a''b'\n";
         assert_eq!(
-            find_key_assignment(body, "AGENTPORT_HT_API_KEY").as_deref(),
+            find_key_assignment(body, "INNOVPORT_HT_API_KEY").as_deref(),
             Some("a'b")
         );
     }
@@ -649,7 +653,7 @@ wire_api = "responses"
     #[test]
     fn machine_scan_recovers_a_codex_key_for_export() {
         let d = tmpdir("machine_key");
-        let env_var = format!("AGENTPORT_SCAN_TEST_{}_KEY", std::process::id());
+        let env_var = format!("INNOVPORT_SCAN_TEST_{}_KEY", std::process::id());
         fs::create_dir_all(d.join(".codex")).unwrap();
         write(
             &d.join(".codex"),
@@ -660,9 +664,9 @@ wire_api = "responses"
                  env_key = \"{env_var}\"\n"
             ),
         );
-        fs::create_dir_all(d.join(".agentport")).unwrap();
+        fs::create_dir_all(d.join(".innovport")).unwrap();
         fs::write(
-            d.join(".agentport/profiles.sh"),
+            d.join(".innovport/profiles.sh"),
             format!("{env_var}='key-from-mac' command codex --profile ht \"$@\"\n"),
         )
         .unwrap();
@@ -675,7 +679,7 @@ wire_api = "responses"
     #[test]
     fn shell_aliases_are_kept_separate_from_cli_profile_names() {
         let d = tmpdir("shell_aliases");
-        let env_var = format!("AGENTPORT_SHELL_ALIAS_{}_KEY", std::process::id());
+        let env_var = format!("INNOVPORT_SHELL_ALIAS_{}_KEY", std::process::id());
         fs::create_dir_all(d.join(".claude/profiles")).unwrap();
         fs::create_dir_all(d.join(".codex")).unwrap();
         fs::create_dir_all(d.join(".codex/keys")).unwrap();

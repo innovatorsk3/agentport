@@ -87,7 +87,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: agentport-${{ matrix.label }}
+          name: innovport-${{ matrix.label }}
           if-no-files-found: error
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
@@ -105,7 +105,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: agentport-*
+          pattern: innovport-*
           path: artifacts
           merge-multiple: true
 
@@ -131,17 +131,17 @@ jobs:
           test -n "$linux_appimage"
           test -n "$linux_deb"
 
-          cp "$windows" release-assets/agentport-windows-x64.exe
-          cp "$arm_dmg" release-assets/agentport-macos-arm64.dmg
-          cp "$intel_dmg" release-assets/agentport-macos-intel.dmg
-          cp "$linux_appimage" release-assets/agentport-linux-x64.AppImage
-          cp "$linux_deb" release-assets/agentport-linux-x64.deb
+          cp "$windows" release-assets/innovport-windows-x64.exe
+          cp "$arm_dmg" release-assets/innovport-macos-arm64.dmg
+          cp "$intel_dmg" release-assets/innovport-macos-intel.dmg
+          cp "$linux_appimage" release-assets/innovport-linux-x64.AppImage
+          cp "$linux_deb" release-assets/innovport-linux-x64.deb
 
           notes=$(cat <<'EOF'
           Download the build for your machine below, or fetch it directly.
 
           Windows:
-          curl.exe --fail --location --show-error -o agentport-setup.exe https://github.com/REPO/releases/latest/download/agentport-windows-x64.exe
+          curl.exe --fail --location --show-error -o innovport-setup.exe https://github.com/REPO/releases/latest/download/innovport-windows-x64.exe
 
           Builds are not code-signed. Windows SmartScreen and macOS Gatekeeper may ask for confirmation on first launch.
           EOF
@@ -152,5 +152,5 @@ jobs:
             gh release upload "$TAG" release-assets/* --repo "$REPO" --clobber
           else
             gh release create "$TAG" release-assets/* --repo "$REPO" \
-              --title "agentport $TAG" --notes "$notes"
+              --title "InnovPort $TAG" --notes "$notes"
           fi

@@ -13,7 +13,7 @@ pub fn provider_key(alias: &str) -> String {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect();
-    format!("agentport_{sanitized}")
+    format!("innovport_{sanitized}")
 }
 
 /// Default env var name for a profile's key.
@@ -31,7 +31,7 @@ pub fn default_env_var(alias: &str) -> String {
             }
         })
         .collect();
-    format!("AGENTPORT_{sanitized}_API_KEY")
+    format!("INNOVPORT_{sanitized}_API_KEY")
 }
 
 /// Renders the overlay TOML.
@@ -130,12 +130,12 @@ mod tests {
         let out = render(&profile("ht", DangerLevel::Bypass), None).unwrap();
         let v = parse(&out);
 
-        assert_eq!(v["model_provider"].as_str(), Some("agentport_ht"));
+        assert_eq!(v["model_provider"].as_str(), Some("innovport_ht"));
         assert_eq!(v["model"].as_str(), Some("gpt-5.5"));
 
-        let p = &v["model_providers"]["agentport_ht"];
+        let p = &v["model_providers"]["innovport_ht"];
         assert_eq!(p["base_url"].as_str(), Some("https://htmustc.id.vn/v1"));
-        assert_eq!(p["env_key"].as_str(), Some("AGENTPORT_HT_API_KEY"));
+        assert_eq!(p["env_key"].as_str(), Some("INNOVPORT_HT_API_KEY"));
         assert_eq!(p["wire_api"].as_str(), Some("responses"));
     }
 
@@ -197,8 +197,8 @@ trust_level = "trusted"
     /// Each profile must carry its own variable — evidence #3.
     #[test]
     fn each_profile_gets_a_distinct_env_var() {
-        assert_eq!(default_env_var("ht"), "AGENTPORT_HT_API_KEY");
-        assert_eq!(default_env_var("cse"), "AGENTPORT_CSE_API_KEY");
+        assert_eq!(default_env_var("ht"), "INNOVPORT_HT_API_KEY");
+        assert_eq!(default_env_var("cse"), "INNOVPORT_CSE_API_KEY");
         assert_ne!(default_env_var("ht"), default_env_var("cse"));
     }
 
@@ -207,9 +207,9 @@ trust_level = "trusted"
     fn dashed_aliases_produce_usable_keys() {
         let out = render(&profile("co-ht", DangerLevel::Bypass), None).unwrap();
         let v = parse(&out);
-        assert_eq!(v["model_provider"].as_str(), Some("agentport_co_ht"));
-        assert!(v["model_providers"].get("agentport_co_ht").is_some());
-        assert_eq!(default_env_var("co-ht"), "AGENTPORT_CO_HT_API_KEY");
+        assert_eq!(v["model_provider"].as_str(), Some("innovport_co_ht"));
+        assert!(v["model_providers"].get("innovport_co_ht").is_some());
+        assert_eq!(default_env_var("co-ht"), "INNOVPORT_CO_HT_API_KEY");
     }
 
     /// A key the user set by hand must survive, not be replaced by the default.
@@ -220,7 +220,7 @@ trust_level = "trusted"
         let out = render(&p, None).unwrap();
         let v = parse(&out);
         assert_eq!(
-            v["model_providers"]["agentport_ht"]["env_key"].as_str(),
+            v["model_providers"]["innovport_ht"]["env_key"].as_str(),
             Some("MUST1C_HT_API_KEY")
         );
     }

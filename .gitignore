@@ -24,8 +24,11 @@ release/
 # ---- SECRETS: never commit ----
 # Bundle files carry API keys in plaintext by design (internal use).
 # See docs/requirements.md §7 — these must never reach git.
+*.innovport
 *.agentport
+*.innovport.json
 *.agentport.json
+**/innovport-bundle*
 **/agentport-bundle*
 .env
 .env.*

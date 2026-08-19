@@ -40,7 +40,7 @@ What the app does: write config files, make HTTP test calls, check whether a CLI
 ## 2. Layout
 
 ```
-agentport/
+innovport/
 ├── src/                      # React UI
 │   ├── screens/              # source · list · summary
 │   ├── components/
@@ -100,7 +100,7 @@ pnpm tauri build        # release bundle for the host OS
 cd src-tauri && cargo test    # Rust unit tests
 ```
 
-**Verified on 2026-08-11:** Node 22.22.0 · pnpm 10.15.1 · Rust 1.97.1 · 94 Rust tests passing (91 unit + 3 integration) · release build produced `agentport.app` (9.7 MB) and `agentport_0.1.0_aarch64.dmg` (2.8 MB).
+**Verified on 2026-08-11:** Node 22.22.0 · pnpm 10.15.1 · Rust 1.97.1 · Rust tests passing · release build produced the InnovPort app and DMG.
 
 ---
 
@@ -122,16 +122,16 @@ Uses `tauri-apps/tauri-action@v1`, triggered by pushing a `v*` tag.
 ### Stable download URLs
 
 Tauri's bundle names include the app version — for example
-`agentport_0.1.0_x64-setup.exe` — so the filename moves with every release and
+`innovport_0.1.0_x64-setup.exe` — so the filename moves with every release and
 cannot be fetched blind. The publish job copies each artifact to a fixed,
 platform-labelled name:
 
 ```
-agentport-windows-x64-setup.exe
-agentport-macos-arm64.dmg
-agentport-macos-intel.dmg
-agentport-linux-x64.AppImage
-agentport-linux-x64.deb
+innovport-windows-x64.exe
+innovport-macos-arm64.dmg
+innovport-macos-intel.dmg
+innovport-linux-x64.AppImage
+innovport-linux-x64.deb
 ```
 
 That is what makes `releases/latest/download/<name>` resolve, so a fresh machine
@@ -164,14 +164,14 @@ Per requirements §7, bundles carry keys in **plaintext** — deliberate, for in
 
 Consequences for a public repository:
 
-- `.gitignore` blocks `*.agentport`, `*.agentport.json`, `**/agentport-bundle*`
+- `.gitignore` blocks `*.innovport`, `*.innovport.json`, `**/innovport-bundle*`, and legacy `.agentport` bundles
 - The extension is deliberately **distinctive**, not `config.json` — `git add .` forgives nobody
 - The README states plainly: **do not commit bundle files**
 - Any sample files use fake keys and an `.example` suffix
 
 This is not a theoretical risk: a live API key was found sitting in plaintext in the developer's `.zshrc`.
 
-**Verified:** `git check-ignore` confirms `test.agentport`, `sub/agentport-bundle-2026.json`, and `.env` are all blocked, and `git add -A` does not pick them up.
+**Verified:** `git check-ignore` confirms InnovPort bundle files and legacy `.agentport` files are blocked, and `git add -A` does not pick them up.
 
 ---
 

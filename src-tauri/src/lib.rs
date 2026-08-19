@@ -1,4 +1,4 @@
-//! agentport — carry Claude Code / Codex CLI configuration to another machine.
+//! InnovPort — carry Claude Code / Codex CLI configuration to another machine.
 //!
 //! See `docs/requirements.md`. Each module below maps to a section there.
 
@@ -19,6 +19,9 @@ use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+const BUNDLE_EXTENSION: &str = "innovport";
+const LEGACY_BUNDLE_EXTENSION: &str = "agentport";
 
 fn home_dir() -> Result<PathBuf, String> {
     #[cfg(windows)]
@@ -177,12 +180,10 @@ fn plan_import(incoming: Bundle, existing: Vec<Profile>) -> Result<Vec<ImportPla
 fn write_bundle(path: String, bundle: Bundle) -> Result<(), String> {
     bundle::validate_bundle(&bundle)?;
     let path = PathBuf::from(path);
-    if !path
-        .extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("agentport"))
-    {
-        return Err("bundle filename must end with .agentport".into());
+    if !path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+        e.eq_ignore_ascii_case(BUNDLE_EXTENSION) || e.eq_ignore_ascii_case(LEGACY_BUNDLE_EXTENSION)
+    }) {
+        return Err("bundle filename must end with .innovport or legacy .agentport".into());
     }
     let text = serde_json::to_string_pretty(&bundle)
         .map_err(|e| format!("cannot serialize bundle: {e}"))?;
@@ -353,9 +354,29 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    fn valid_bundle() -> Bundle {
+        Bundle::new(vec![Profile {
+            alias: "ht".into(),
+            profile_name: None,
+            cli: CliKind::Codex,
+            provider: "example".into(),
+            base_url: "https://example.test/v1".into(),
+            api_key: "key".into(),
+            env_var: "INNOVPORT_HT_API_KEY".into(),
+            danger: model::DangerLevel::Ask,
+            model_map: ModelMap {
+                default: Some("model".into()),
+                ..ModelMap::default()
+            },
+            wire_api: Some("responses".into()),
+            origin: model::Origin::Manual,
+        }])
+    }
+
     #[test]
     fn decodes_localized_profile_paths_without_console_encoding() {
-        let original = r"C:\Users\ADMIN\OneDrive\Tài liệu\WindowsPowerShell\Microsoft.PowerShell_profile.ps1";
+        let original =
+            r"C:\Users\ADMIN\OneDrive\Tài liệu\WindowsPowerShell\Microsoft.PowerShell_profile.ps1";
         let encoded = original
             .encode_utf16()
             .flat_map(u16::to_le_bytes)
@@ -370,5 +391,20 @@ mod tests {
         assert!(decode_utf16_hex("not-a-path").is_none());
         assert!(decode_utf16_hex("ZZZZ").is_none());
         assert!(decode_utf16_hex("410").is_none());
+    }
+
+    #[test]
+    fn writes_both_new_and_legacy_bundle_extensions() {
+        let root = std::env::temp_dir().join(format!("innovport_bundle_{}", std::process::id()));
+        let new_path = root.with_extension("innovport");
+        let legacy_path = root.with_extension("agentport");
+
+        assert!(write_bundle(new_path.to_string_lossy().into_owned(), valid_bundle()).is_ok());
+        assert!(write_bundle(legacy_path.to_string_lossy().into_owned(), valid_bundle()).is_ok());
+
+        assert!(serde_json::from_str::<Bundle>(&fs::read_to_string(&new_path).unwrap()).is_ok());
+        assert!(serde_json::from_str::<Bundle>(&fs::read_to_string(&legacy_path).unwrap()).is_ok());
+        let _ = fs::remove_file(new_path);
+        let _ = fs::remove_file(legacy_path);
     }
 }

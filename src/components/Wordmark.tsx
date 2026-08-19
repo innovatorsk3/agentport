@@ -16,7 +16,7 @@ export function Wordmark({ compact = false }: { compact?: boolean }) {
           compact ? "text-[13px]" : "text-[15px]"
         }`}
       >
-        AGENT<span className="text-primary">PORT</span>
+        INNOV<span className="text-primary">PORT</span>
       </span>
     </div>
   );

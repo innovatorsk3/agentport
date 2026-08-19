@@ -1,4 +1,4 @@
-# agentport — Requirements
+# InnovPort — Requirements
 
 **Date:** 2026-08-11
 **Status:** Scope agreed — ready to build
@@ -94,11 +94,11 @@ The app writes into **its own directory** and generates **one file**. The shell 
 
 ```sh
 # macOS/Linux — ~/.zshrc | ~/.bashrc | fish config
-[ -f ~/.agentport/profiles.sh ] && . ~/.agentport/profiles.sh
+[ -f ~/.innovport/profiles.sh ] && . ~/.innovport/profiles.sh
 ```
 ```powershell
 # Windows — $PROFILE
-if (Test-Path ~/.agentport/profiles.ps1) { . ~/.agentport/profiles.ps1 }
+if (Test-Path ~/.innovport/profiles.ps1) { . ~/.innovport/profiles.ps1 }
 ```
 
 **Why:** a GUI editing a shell startup file with regex is a foot-gun. Corrupt it once and **the terminal will not open** — and you need a terminal to fix it. Uninstall = delete one line. Blast radius zero.
@@ -155,7 +155,10 @@ The destination machine **translates** that into files matching whatever CLI ver
 ### Other requirements
 - **Bundle version number** — the format will change and old bundles persist
 - **Keys travel readable** — internal use; no encryption, no passphrase
-- **A filename unlikely to slip into git** — not `config.json`; use a distinctive extension (`.agentport`). `git add .` forgives nobody, and this user has already had a key sitting in plaintext in `.zshrc`
+- **A filename unlikely to slip into git** — not `config.json`; use a distinctive extension (`.innovport`). `git add .` forgives nobody, and this user has already had a key sitting in plaintext in `.zshrc`
+
+InnovPort continues to import legacy `.agentport` bundles and migrate the old
+`~/.agentport` shell source line when an existing installation is upgraded.
 - **Selectable export** — the user picks which profiles travel
 
 ---

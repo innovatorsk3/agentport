@@ -4,7 +4,8 @@
 
 /** Deliberately distinctive so it does not slip into a repo unnoticed —
  *  bundles carry API keys in plaintext by design. */
-export const BUNDLE_EXT = ".agentport";
+export const BUNDLE_EXT = ".innovport";
+export const LEGACY_BUNDLE_EXT = ".agentport";
 export const CLAUDE_AUTH_ENV = "ANTHROPIC_AUTH_TOKEN";
 
 export type CliKind = "claude" | "codex";
@@ -116,7 +117,7 @@ export const PRESETS: Record<CliKind, Partial<Profile>> = {
     alias: "cx",
     // Codex names one variable per provider; a per-profile default avoids the
     // shared-variable mix-up that broke a second profile in practice.
-    env_var: "AGENTPORT_CX_API_KEY",
+    env_var: "INNOVPORT_CX_API_KEY",
     danger: "bypass",
     wire_api: "responses",
     model_map: {},

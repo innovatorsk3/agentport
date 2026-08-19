@@ -3,7 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
-import { BUNDLE_EXT } from "./types";
+import { BUNDLE_EXT, LEGACY_BUNDLE_EXT } from "./types";
 import type {
   Bundle,
   CliKind,
@@ -40,11 +40,17 @@ export const planImport = (incoming: Bundle, existing: Profile[]) =>
 export async function saveBundle(bundle: Bundle): Promise<boolean> {
   const selected = await save({
     defaultPath: `profiles${BUNDLE_EXT}`,
-    filters: [{ name: "agentport bundle", extensions: ["agentport"] }],
+    filters: [
+      {
+        name: "InnovPort bundle",
+        extensions: [BUNDLE_EXT.slice(1), LEGACY_BUNDLE_EXT.slice(1)],
+      },
+    ],
   });
   if (!selected) return false;
 
-  const path = selected.toLowerCase().endsWith(BUNDLE_EXT)
+  const lower = selected.toLowerCase();
+  const path = lower.endsWith(BUNDLE_EXT) || lower.endsWith(LEGACY_BUNDLE_EXT)
     ? selected
     : `${selected}${BUNDLE_EXT}`;
   await invoke("write_bundle", { path, bundle });

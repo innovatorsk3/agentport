@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/media/banner.svg" alt="agentport" width="820">
+<img src="docs/media/banner.svg" alt="InnovPort" width="820">
 
 <br>
 
@@ -26,6 +26,8 @@
 > [!WARNING]
 > Bundles carry your API keys **in plaintext**. That is deliberate — this is an internal tool and the keys have to travel readable. **Never commit a bundle file.**
 
+> InnovPort imports legacy `.agentport` bundles and reads the previous `~/.agentport` script directory. New exports and generated files use `.innovport` and `~/.innovport`.
+
 <br>
 
 ## 🎯 The problem
@@ -48,8 +50,8 @@ Every release publishes builds under **stable filenames**, so a fresh machine ca
 <td>
 
 ```powershell
-curl.exe --fail --location --show-error -o agentport-setup.exe https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-windows-x64.exe
-.\agentport-setup.exe
+curl.exe --fail --location --show-error -o innovport-setup.exe https://github.com/innovatorsk3/agentport/releases/latest/download/innovport-windows-x64.exe
+.\innovport-setup.exe
 ```
 
 </td>
@@ -59,8 +61,8 @@ curl.exe --fail --location --show-error -o agentport-setup.exe https://github.co
 <td>
 
 ```bash
-curl --fail --location --show-error -o agentport.dmg https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-macos-arm64.dmg
-open agentport.dmg
+curl --fail --location --show-error -o innovport.dmg https://github.com/innovatorsk3/agentport/releases/latest/download/innovport-macos-arm64.dmg
+open innovport.dmg
 ```
 
 </td>
@@ -70,8 +72,8 @@ open agentport.dmg
 <td>
 
 ```bash
-curl --fail --location --show-error -o agentport.AppImage https://github.com/innovatorsk3/agentport/releases/latest/download/agentport-linux-x64.AppImage
-chmod +x agentport.AppImage && ./agentport.AppImage
+curl --fail --location --show-error -o innovport.AppImage https://github.com/innovatorsk3/agentport/releases/latest/download/innovport-linux-x64.AppImage
+chmod +x innovport.AppImage && ./innovport.AppImage
 ```
 
 </td>
@@ -129,7 +131,7 @@ The third one costs twenty minutes of `curl` to identify by hand.
 
 <img src="docs/media/form.png" alt="Profile form" width="100%">
 
-A profile pointing at a model the provider does not serve looks **completely correct** in both CLIs and fails only at call time. agentport fetches the real `/v1/models` list for that key and checks the mapping against it.
+A profile pointing at a model the provider does not serve looks **completely correct** in both CLIs and fails only at call time. InnovPort fetches the real `/v1/models` list for that key and checks the mapping against it.
 
 > Found on the developer's own machine while building this: two Claude profiles configured for `claude-opus-5`, against a provider serving 14 models and **not one Claude model among them**. Neither CLI says a word about it.
 
@@ -142,14 +144,14 @@ A profile pointing at a model the provider does not serve looks **completely cor
 
 **On the machine that already works**
 
-`1` Open agentport — it scans and offers what it finds
-<br>`2` **Export bundle** → save the `.agentport` file
+`1` Open InnovPort — it scans and offers what it finds
+<br>`2` **Export bundle** → save the `.innovport` file
 
 </td><td valign="top">
 
 **On the new machine**
 
-`3` Download and run agentport
+`3` Download and run InnovPort
 <br>`4` **Import a bundle** → pick that file
 <br>`5` **Install** → writes config, registers one shell line, tests every profile
 
@@ -162,9 +164,9 @@ Open a new terminal. Your aliases are there.
 
 ## 🧭 Why it exists
 
-Several tools already switch providers for Claude Code. agentport is not competing there:
+Several tools already switch providers for Claude Code. InnovPort is not competing there:
 
-| | Provider switchers | agentport |
+| | Provider switchers | InnovPort |
 |:--|:--:|:--:|
 | Switch provider on one machine | ✅ | — |
 | Carry a setup **across machines and operating systems** | ❌ | ✅ |
@@ -218,7 +220,7 @@ It creates aliases. It never rewrites your default CLI config or your existing a
 </table>
 
 ```bash
-git clone https://github.com/innovatorsk3/agentport && cd agentport
+git clone https://github.com/innovatorsk3/agentport innovport && cd innovport
 pnpm install
 pnpm tauri dev                  # run it
 cd src-tauri && cargo test      # unit + integration tests

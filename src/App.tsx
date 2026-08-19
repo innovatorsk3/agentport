@@ -98,7 +98,7 @@ export default function App() {
     try {
       const parsed: unknown = JSON.parse(await file.text());
       if (!isBundle(parsed)) {
-        throw new Error("that file is not an agentport bundle");
+        throw new Error("that file is not an InnovPort bundle");
       }
       const bundle: Bundle = {
         ...parsed,

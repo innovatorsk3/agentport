@@ -89,7 +89,7 @@ export function Summary({
           </div>
           <p className="text-muted-foreground text-xs leading-relaxed">
             {!installed[p.cli]
-              ? "Kept, but the CLI is not on this machine. Install it and run agentport again."
+              ? "Kept, but the CLI is not on this machine. Install it and run InnovPort again."
               : `Kept, but ${profileConfigurationIssue(p) ?? "it needs setup"}. Edit it before installing.`}
           </p>
         </Card>
@@ -119,7 +119,7 @@ export function Summary({
         <span className="text-muted-foreground">
           {report.rc_line_added ? (
             <>
-              Added agentport to{" "}
+              Added InnovPort to{" "}
               {report.rc_files.length === 1 ? (
                 <code className="text-foreground">{report.rc_files[0]}</code>
               ) : (
@@ -141,7 +141,7 @@ export function Summary({
                 <>
                   The configured profile{" "}
                   <code className="text-foreground">{report.rc_files[0]}</code>{" "}
-                  already contains agentport, so it was left untouched.
+                  already contains InnovPort, so it was left untouched.
                 </>
               ) : (
                 <>
@@ -149,7 +149,7 @@ export function Summary({
                   <code className="text-foreground">
                     {report.rc_files.join(", ")}
                   </code>{" "}
-                  already contain agentport, so they were left untouched.
+                  already contain InnovPort, so they were left untouched.
                 </>
               )}{" "}
               Your aliases are live in any new terminal.

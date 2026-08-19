@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { ImportIcon, PlusIcon, ScanIcon, Spinner } from "@/components/Icons";
-import { BUNDLE_EXT, type CliKind } from "@/types";
+import { BUNDLE_EXT, LEGACY_BUNDLE_EXT, type CliKind } from "@/types";
 
 interface Props {
   installed: Record<CliKind, boolean>;
@@ -57,7 +57,7 @@ export function StartScreen({
         >
           <input
             type="file"
-            accept={`${BUNDLE_EXT},application/json`}
+            accept={`${BUNDLE_EXT},${LEGACY_BUNDLE_EXT},application/json`}
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "agentport",
-  "version": "0.1.4",
-  "identifier": "dev.agentport.desktop",
+  "productName": "InnovPort",
+  "version": "0.2.0",
+  "identifier": "dev.innovators.innovport",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "agentport",
+        "title": "InnovPort",
         "width": 900,
         "height": 640,
         "minWidth": 720,

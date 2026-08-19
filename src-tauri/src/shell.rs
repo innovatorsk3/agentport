@@ -77,20 +77,23 @@ pub fn rc_already_registered(rc_text: &str) -> bool {
 pub fn ensure_rc_line(rc_path: &Path, home: &Path, shell: ShellKind) -> Result<RcOutcome, String> {
     let existing = fs::read_to_string(rc_path).unwrap_or_default();
 
-    if rc_already_registered(&existing) {
-        return Ok(RcOutcome::AlreadyPresent);
-    }
-
+    let has_new = rc_already_registered(&existing);
     if active_marker_present(&existing, LEGACY_RC_MARKER) {
+        let mut inserted = has_new;
         let migrated = existing
             .lines()
-            .map(|line| {
+            .filter_map(|line| {
                 if !line.trim_start().starts_with('#')
                     && line.replace('\\', "/").contains(LEGACY_RC_MARKER)
                 {
-                    rc_line(home, shell)
+                    if inserted {
+                        None
+                    } else {
+                        inserted = true;
+                        Some(rc_line(home, shell))
+                    }
                 } else {
-                    line.to_string()
+                    Some(line.to_string())
                 }
             })
             .collect::<Vec<_>>()
@@ -107,6 +110,10 @@ pub fn ensure_rc_line(rc_path: &Path, home: &Path, shell: ShellKind) -> Result<R
         fs::write(rc_path, migrated)
             .map_err(|e| format!("cannot write {}: {e}", rc_path.display()))?;
         return Ok(RcOutcome::Added);
+    }
+
+    if has_new {
+        return Ok(RcOutcome::AlreadyPresent);
     }
 
     let mut out = existing;
@@ -236,7 +243,7 @@ pub fn write_script(
     fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
 
     let path = script_path(home, shell);
-    fs::write(&path, render_script(home, profiles, shell))
+    crate::file_security::write_private(&path, render_script(home, profiles, shell).as_bytes())
         .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
     Ok(path)
 }
@@ -384,6 +391,25 @@ mod tests {
         );
         let text = fs::read_to_string(rc).unwrap();
         assert!(text.contains(".innovport/profiles.sh"));
+        assert!(!text.contains(".agentport/profiles.sh"));
+    }
+
+    #[test]
+    fn removes_legacy_source_when_both_paths_are_registered() {
+        let home = tmpdir("rc_both");
+        let rc = home.join(".zshrc");
+        fs::write(
+            &rc,
+            ". \"$HOME/.agentport/profiles.sh\"\n[ -f \"$HOME/.innovport/profiles.sh\" ] && . \"$HOME/.innovport/profiles.sh\"\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            ensure_rc_line(&rc, &home, ShellKind::Posix).unwrap(),
+            RcOutcome::Added
+        );
+        let text = fs::read_to_string(rc).unwrap();
+        assert_eq!(active_marker_lines(&text), 1);
         assert!(!text.contains(".agentport/profiles.sh"));
     }
 

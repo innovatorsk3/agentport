@@ -1,5 +1,12 @@
 # Changelog
 
+## InnovPort 0.2.1 - 2026-08-19
+
+### Fixed
+- Preserve the legacy Tauri application identifier so existing installs can upgrade in place.
+- Remove stale Agentport shell source lines when both legacy and InnovPort paths are present.
+- Restrict generated bundle, script, and CLI overlay files to the owner on Unix systems.
+
 ## InnovPort 0.2.0 - 2026-08-19
 
 ### Changed

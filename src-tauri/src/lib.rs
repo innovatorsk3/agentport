@@ -4,6 +4,7 @@
 
 pub mod bundle; // §9  export/import, identity comparison
 pub mod detect; // §10 is the CLI present on this machine
+pub(crate) mod file_security;
 pub mod model; // §7  bundle types — intent, not files
 pub mod models; // §15 fetch + validate provider model ids
 pub mod probe; // §10 real generation call, classify the failure
@@ -16,7 +17,6 @@ use model::{Bundle, CliKind, ModelMap, Profile, ProfileState};
 use models::{ModelInfo, ModelIssue};
 use probe::ProbeResult;
 use serde::Serialize;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -187,7 +187,7 @@ fn write_bundle(path: String, bundle: Bundle) -> Result<(), String> {
     }
     let text = serde_json::to_string_pretty(&bundle)
         .map_err(|e| format!("cannot serialize bundle: {e}"))?;
-    fs::write(&path, format!("{text}\n"))
+    file_security::write_private(&path, format!("{text}\n").as_bytes())
         .map_err(|e| format!("cannot write {}: {e}", path.display()))
 }
 
@@ -353,6 +353,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn valid_bundle() -> Bundle {
         Bundle::new(vec![Profile {

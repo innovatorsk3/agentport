@@ -53,7 +53,8 @@ pub fn write_profile(home: &Path, profile: &Profile) -> Result<PathBuf, String> 
         CliKind::Codex => codex::render(profile, existing.as_deref())?,
     };
 
-    fs::write(&path, rendered).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    crate::file_security::write_private(&path, rendered.as_bytes())
+        .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
     Ok(path)
 }
 
